@@ -1,4 +1,4 @@
-# lotus-ime
+# mimi-ime
 
 Why another input method? Because ibus and fcitx5 are bad and hard without document much when developing your own input method engine and I am dumb so I think I should make my own input method.
 
