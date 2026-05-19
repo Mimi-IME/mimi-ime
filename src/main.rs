@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use users::get_current_username;
 
-const APP_NAME: &str = "lotus-ime";
+const APP_NAME: &str = "mimi-ime";
 
 fn init_dir(local_share_dir: &str) {
     if !Path::new(&local_share_dir).exists() {

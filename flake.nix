@@ -1,5 +1,5 @@
 {
-  description = "Lotus IME flake";
+  description = "Mimi IME flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -21,7 +21,7 @@
     };
 
     packages = {
-      ${system}.default = callPackage ./default.nix {};
+      ${system}.default = callPackage ./nix/default.nix {};
     };
   };
 }

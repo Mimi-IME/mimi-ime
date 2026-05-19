@@ -2,24 +2,23 @@
 , stdenv ? pkgs.stdenv
 , lib ? stdenv.lib
 , rustPlatform ? pkgs.rustPlatform
-, fetchFromGitHub ? pkgs.fetchFromGitHub
 }:
 
-rustPlatform.buildRustPackage rec {
-  pname = "lotus-ime";
+rustPlatform.buildRustPackage {
+  pname = "mimi-ime";
   version = "1.0-unstable";
 
-  src = ./.;
+  src = ../.;
 
   buildInputs = [];
   nativeBuildInputs = [];
   cargoLock = {
-    lockFile = ./Cargo.lock;
+    lockFile = ../Cargo.lock;
   };
 
   meta = with lib; {
     homepage = "";
-    description = "lotus-ime rust";
+    description = "mimi-ime rust";
     license = licenses.mit;
   };
 }
