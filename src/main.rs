@@ -1,51 +1,109 @@
-use std::fs::File;
-
-use daemonize_me::{Daemon, Group, User};
-use std::ffi::OsString;
+use ksni::TrayMethods;
 use std::path::Path;
 use users::get_current_username;
 
-const APP_NAME: &str = "mimi-ime";
+const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
-fn init_dir(local_share_dir: &str) {
-    if !Path::new(&local_share_dir).exists() {
-        std::fs::create_dir_all(&local_share_dir).expect("Failed to create local share directory");
+#[derive(Debug)]
+struct MimiTray {
+    is_running: bool,
+}
+
+impl ksni::Tray for MimiTray {
+    fn id(&self) -> String {
+        APP_NAME.into()
     }
 
-    if !Path::new(&format!("{}/{}", local_share_dir, APP_NAME)).exists() {
-        std::fs::create_dir_all(&format!("{}/{}", local_share_dir, APP_NAME)).expect("Failed to create logs directory");
+    fn icon_name(&self) -> String {
+        "input-keyboard".into()
     }
 
-    if !Path::new(&format!("{}/{}/logs", local_share_dir, APP_NAME)).exists() {
-        std::fs::create_dir_all(&format!("{}/{}/logs", local_share_dir, APP_NAME)).expect("Failed to create logs directory");
+    fn title(&self) -> String {
+        APP_NAME.into()
+    }
+
+    fn tool_tip(&self) -> ksni::ToolTip {
+        ksni::ToolTip {
+            title: format!(
+                "{} - {}",
+                APP_NAME,
+                if self.is_running {
+                    "Running"
+                } else {
+                    "Stopped"
+                }
+            ),
+            ..Default::default()
+        }
+    }
+
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::*;
+        vec![
+            StandardItem {
+                label: format!(
+                    "Status: {}",
+                    if self.is_running {
+                        "Running ✓"
+                    } else {
+                        "Stopped ✗"
+                    }
+                ),
+                enabled: false,
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
+            StandardItem {
+                label: "Restart".into(),
+                icon_name: "view-refresh".into(),
+                activate: Box::new(|this: &mut Self| {
+                    this.is_running = true;
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: "Quit".into(),
+                icon_name: "application-exit".into(),
+                activate: Box::new(|_| std::process::exit(0)),
+                ..Default::default()
+            }
+            .into(),
+        ]
     }
 }
 
-fn main() {
-    let username: OsString = get_current_username().expect("Failed to get current username");
-    let home_dir = format!("/home/{}", username.to_string_lossy());
-    let local_share_dir = format!("{}/.local/share", home_dir);
+fn init_dir(local_share_dir: &str) {
+    for path in [
+        local_share_dir.to_string(),
+        format!("{}/{}", local_share_dir, APP_NAME),
+        format!("{}/{}/logs", local_share_dir, APP_NAME),
+    ] {
+        if !Path::new(&path).exists() {
+            std::fs::create_dir_all(&path).expect("Failed to create directory");
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    if std::env::var("DBUS_SESSION_BUS_ADDRESS").is_err() {
+        eprintln!("WARNING: DBUS_SESSION_BUS_ADDRESS not set — systray will not work");
+    }
+
+    let username = get_current_username().expect("Failed to get current username");
+    let local_share_dir = format!("/home/{}/.local/share", username.to_string_lossy());
 
     init_dir(&local_share_dir);
 
-    let stdout = File::create(format!("{}/{}/logs/{}-info.log", local_share_dir, APP_NAME, APP_NAME)).unwrap();
-    let stderr = File::create(format!("{}/{}/logs/{}-error.log", local_share_dir, APP_NAME, APP_NAME)).unwrap();
-    let daemon = Daemon::new()
-        .pid_file("lotus-ime.pid", Some(false))
-        .user(User::try_from(username.to_string_lossy().as_ref()).unwrap())
-        .group(Group::try_from("users").unwrap())
-        .umask(0o000)
-        .work_dir(format!("/home/{}/.local/share/logs/lotus-ime", username.to_string_lossy()))
-        .stdout(stdout)
-        .stderr(stderr)
-        .start();
+    let _handle = MimiTray { is_running: true }
+        .spawn()
+        .await
+        .expect("Failed to start system tray");
 
-    match daemon {
-        Ok(_) => println!("Daemonized with success"),
-        Err(e) => eprintln!("Error, {}", e),
-    }
-
+    // Giữ process chạy mãi
     loop {
-        // You wil have to kill this process yourself
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
     }
 }
