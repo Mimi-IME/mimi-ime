@@ -6,15 +6,21 @@ Linux và môi trường Wayland!!! >;3
 **⚠️ Lưu ý:** Đây là dự án nghiên cứu hơn là có thể sử dụng hằng ngày nên có thể bị thiếu nhiều tính năng
 và có thể phát sinh nhiều lỗi. Hãy cân nhắc trước khi sử dụng.
 
+## Hỗ trợ
+
+Nếu bạn cần trợ giúp có thể tạo báo cáo lỗi hoặc vào phòng chat trực tuyến Matrix ở đây.
+
+[Tham gia phòng Matrix #mimi-ime:matrix.org](matrix:r/mimi-ime:matrix.org?action=join)
+
 ## Tính năng
 
 Những tính năng quan trọng sẽ hỗ trợ trong tương lai
 
 - [x] Systray icon
 - [x] Hỗ trợ Wayland (chỉ hỗ trợ các compositor hỗ trợ zwp_input_method_v2)
+- [x] Cho phép english mode và VNI mode
 - [ ] Tài liệu giải thích chi tiết của dự án
 - [ ] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
-- [ ] Cho phép english mode và VNI mode
 - [ ] Có GUI cài đặt và thiết lập cấu hình
 - [ ] Có icon và logo
 
@@ -27,7 +33,7 @@ vì fcitx5 hay ibus đều là bọc từ 1 phần mềm lên tự tạo cho b�
 hiểu và trải nghiệm phát triển cũng như tài liệu rất tệ nên đây là lý do dự án này được sinh ra để có
 thể dễ dàng kiểm soát dự án, có toolchain vui vẻ để phát triển và dễ theo chuẩn Wayland protocols.
 
-### Sẽ có GNOME không?
+### Sẽ có hỗ trợ GNOME không?
 
 Có hoặc không tùy thuộc vào tiến độ dự án và cảm hứng của mình. Đây là dự án tự mình làm cho mình nên
 sẽ không có nhu cầu sử dụng GNOME trong tương lai gần. Nói về vấn đề input method wayland thì nó rất tệ vì mỗi bên tự tạo
