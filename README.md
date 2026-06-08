@@ -10,7 +10,7 @@ và có thể phát sinh nhiều lỗi. Hãy cân nhắc trước khi sử dụn
 
 Nếu bạn cần trợ giúp có thể tạo báo cáo lỗi hoặc vào phòng chat trực tuyến Matrix ở đây.
 
-[Tham gia phòng Matrix #mimi-ime:matrix.org](matrix:r/mimi-ime:matrix.org?action=join)
+[Tham gia phòng Matrix #mimi-ime:matrix.org](https://matrix.to/#/#mimi-ime:matrix.org)
 
 ## Tính năng
 
