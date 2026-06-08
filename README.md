@@ -10,7 +10,7 @@ và có thể phát sinh nhiều lỗi. Hãy cân nhắc trước khi sử dụn
 
 Nếu bạn cần trợ giúp có thể tạo báo cáo lỗi hoặc vào phòng chat trực tuyến Matrix ở đây.
 
-[Tham gia phòng Matrix #mimi-ime:matrix.org](https://matrix.to/#/#mimi-ime:matrix.org)
+[Tham gia phòng Matrix](https://matrix.to/#/#mimi-ime:matrix.org)
 
 ## Tính năng
 
@@ -19,10 +19,10 @@ Những tính năng quan trọng sẽ hỗ trợ trong tương lai
 - [x] Systray icon
 - [x] Hỗ trợ Wayland (chỉ hỗ trợ các compositor hỗ trợ zwp_input_method_v2)
 - [x] Cho phép english mode và VNI mode
+- [x] Có icon và logo
 - [ ] Tài liệu giải thích chi tiết của dự án
 - [ ] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
 - [ ] Có GUI cài đặt và thiết lập cấu hình
-- [ ] Có icon và logo
 
 ## Câu hỏi thường gặp
 
