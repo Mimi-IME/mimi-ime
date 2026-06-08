@@ -1,15 +1,18 @@
 { config, lib, pkgs, options, ... }:
-
 let
-  cfg = config.programs.mimi-ime;
+  cfg = config.programs."mimi-ime";
   isHM = options ? home.packages;
 in {
   options.programs."mimi-ime" = {
     enable = lib.mkEnableOption "Mimi IME";
+    package = lib.mkOption {
+      type = lib.types.package;
+      description = "The mimi-ime package to use.";
+    };
   };
 
   config = lib.mkIf cfg.enable (if isHM then {
-    home.packages = [ pkgs.mimi-ime ];
+    home.packages = [ cfg.package ];
     systemd.user.services."mimi-ime" = {
       Unit = {
         Description = "Mimi IME";
@@ -17,20 +20,18 @@ in {
       };
       Install.WantedBy = [ "graphical-session.target" ];
       Service = {
-        ExecStart = "${pkgs.mimi-ime}/bin/mimi-ime";
+        ExecStart = "${cfg.package}/bin/mimi-ime";
         Restart = "on-failure";
       };
     };
   } else {
-    environment.systemPackages = [ pkgs.mimi-ime ];
+    environment.systemPackages = [ cfg.package ];
     systemd.user.services."mimi-ime" = {
-      Unit = {
-        Description = "Mimi IME";
-        After = [ "graphical-session.target" ];
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-      Service = {
-        ExecStart = "${pkgs.mimi-ime}/bin/mimi-ime";
+      description = "Mimi IME";
+      wantedBy = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+      serviceConfig = {
+        ExecStart = "${cfg.package}/bin/mimi-ime";
         Restart = "on-failure";
       };
     };
