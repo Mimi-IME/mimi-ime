@@ -27,5 +27,8 @@
     packages = {
       ${system}.default = callPackage ./nix/default.nix {};
     };
+
+    nixosModules."mimi-ime"       = import ./nix/module.nix;
+    homeManagerModules."mimi-ime" = import ./nix/module.nix;
   };
 }
