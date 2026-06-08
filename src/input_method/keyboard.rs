@@ -104,13 +104,11 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     let alt_active = xkb_keystate.mod_name_is_active(xkb::MOD_NAME_ALT, xkb::STATE_MODS_EFFECTIVE);
 
     if ctrl_active || alt_active {
-        if is_pressed {
-            if !state.pending_chars.is_empty() {
-                if let Some(im) = &state.input_method {
-                    im.set_preedit_string(String::new(), 0, 0);
-                    im.commit(state.serial);
-                    state.pending_chars.clear();
-                }
+        if is_pressed && !state.pending_chars.is_empty() {
+            if let Some(im) = &state.input_method {
+                im.set_preedit_string(String::new(), 0, 0);
+                im.commit(state.serial);
+                state.pending_chars.clear();
             }
 
             if let Some(kb) = state.keyboard_grab.take() {
@@ -159,14 +157,15 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     ];
 
     if forward_keys.iter().any(|&k| keysym.raw() == k) {
-        if is_pressed && !state.pending_chars.is_empty() {
-            if let Some(im) = &state.input_method {
-                let text = state.get_preedit();
-                im.set_preedit_string(String::new(), 0, 0);
-                im.commit_string(text);
-                im.commit(state.serial);
-                state.pending_chars.clear();
-            }
+        if is_pressed
+            && !state.pending_chars.is_empty()
+            && let Some(im) = &state.input_method
+        {
+            let text = state.get_preedit();
+            im.set_preedit_string(String::new(), 0, 0);
+            im.commit_string(text);
+            im.commit(state.serial);
+            state.pending_chars.clear();
         }
         forward_key(state, key, key_state);
         return;

@@ -35,13 +35,13 @@ impl Transformer for EnglishTransformer {
 struct TelexTransformer;
 impl Transformer for TelexTransformer {
     fn transform(&self, input: Vec<char>, output: &mut String) {
-        vi::transform_buffer(&vi::TELEX, input.into_iter(), output);
+        vi::transform_buffer(&vi::TELEX, input, output);
     }
 }
 
 struct VniTransformer;
 impl Transformer for VniTransformer {
     fn transform(&self, input: Vec<char>, output: &mut String) {
-        vi::transform_buffer(&vi::VNI, input.into_iter(), output);
+        vi::transform_buffer(&vi::VNI, input, output);
     }
 }

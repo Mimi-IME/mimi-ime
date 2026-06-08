@@ -27,7 +27,7 @@ impl ksni::Tray for MimiTray {
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
 
-        let modes = vec![InputMode::English, InputMode::Vni, InputMode::Telex];
+        let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
         let selected = modes
             .iter()
             .position(|m| *m == self.current_mode)
@@ -37,7 +37,7 @@ impl ksni::Tray for MimiTray {
             RadioGroup {
                 selected,
                 select: Box::new(|this: &mut Self, idx| {
-                    let modes = vec![InputMode::English, InputMode::Vni, InputMode::Telex];
+                    let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
                     let new_mode = modes[idx];
                     this.current_mode = new_mode;
                     this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
