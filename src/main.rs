@@ -1,9 +1,13 @@
 use ksni::TrayMethods;
+use mimi_ime::config::InputMode;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::Mutex;
 use users::get_current_username;
 
+use mimi_ime::config::GlobalAppState;
 use mimi_ime::input_method::start_input_method;
-use mimi_ime::tray::tray::{APP_NAME, MimiTray};
+use mimi_ime::tray::tray::{APP_NAME, MimiTray, TrayMessage};
 
 fn init_dir(local_share_dir: &str) {
     for path in [
@@ -28,19 +32,36 @@ async fn main() {
 
     init_dir(&local_share_dir);
 
-    // Wayland IME chạy trên thread riêng vì blocking
+    let app_state = Arc::new(Mutex::new(GlobalAppState {
+        current_mode: InputMode::Telex,
+        is_running: true,
+    }));
+
+    let app_state_for_wayland = app_state.clone();
     std::thread::spawn(|| {
-        if let Err(e) = start_input_method() {
+        if let Err(e) = start_input_method(app_state_for_wayland) {
             eprintln!("Input method error: {}", e);
         }
     });
 
-    let _handle = MimiTray { is_running: true }
-        .spawn()
-        .await
-        .expect("Failed to start system tray");
+    let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
 
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-    }
+    let tray = MimiTray {
+        current_mode: InputMode::Telex,
+        notifier,
+    };
+
+    let _handle = tray.spawn().await.expect("Failed to start system tray");
+
+    tokio::spawn(async move {
+        while let Some(msg) = tray_msgs.recv().await {
+            match msg {
+                TrayMessage::ModeChanged(mode) => {
+                    app_state.lock().unwrap().current_mode = mode;
+                }
+            }
+        }
+    });
+
+    tokio::signal::ctrl_c().await.ok();
 }

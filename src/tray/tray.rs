@@ -1,64 +1,64 @@
+use crate::config::InputMode;
+use tokio::sync::mpsc::UnboundedSender;
+
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+
+pub enum TrayMessage {
+    ModeChanged(InputMode),
+}
 
 #[derive(Debug)]
 pub struct MimiTray {
-    pub is_running: bool,
+    pub current_mode: InputMode,
+    pub notifier: UnboundedSender<TrayMessage>,
 }
 
 impl ksni::Tray for MimiTray {
     fn id(&self) -> String {
         APP_NAME.into()
     }
-
     fn icon_name(&self) -> String {
         "input-keyboard".into()
     }
-
     fn title(&self) -> String {
         APP_NAME.into()
     }
 
-    fn tool_tip(&self) -> ksni::ToolTip {
-        ksni::ToolTip {
-            title: format!(
-                "{} - {}",
-                APP_NAME,
-                if self.is_running {
-                    "Running"
-                } else {
-                    "Stopped"
-                }
-            ),
-            ..Default::default()
-        }
-    }
-
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
+
+        let modes = vec![InputMode::English, InputMode::Vni, InputMode::Telex];
+        let selected = modes
+            .iter()
+            .position(|m| *m == self.current_mode)
+            .unwrap_or(0);
+
         vec![
-            StandardItem {
-                label: format!(
-                    "Status: {}",
-                    if self.is_running {
-                        "Running ✓"
-                    } else {
-                        "Stopped ✗"
-                    }
-                ),
-                enabled: false,
-                ..Default::default()
+            RadioGroup {
+                selected,
+                select: Box::new(|this: &mut Self, idx| {
+                    let modes = vec![InputMode::English, InputMode::Vni, InputMode::Telex];
+                    let new_mode = modes[idx];
+                    this.current_mode = new_mode;
+                    this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
+                }),
+                options: vec![
+                    RadioItem {
+                        label: "English".into(),
+                        ..Default::default()
+                    },
+                    RadioItem {
+                        label: "VNI".into(),
+                        ..Default::default()
+                    },
+                    RadioItem {
+                        label: "Telex".into(),
+                        ..Default::default()
+                    },
+                ],
             }
             .into(),
             MenuItem::Separator,
-            StandardItem {
-                label: "Restart".into(),
-                icon_name: "view-refresh".into(),
-                activate: Box::new(|this: &mut Self| {
-                    this.is_running = true;
-                }),
-                ..Default::default()
-            }
-            .into(),
             StandardItem {
                 label: "Quit".into(),
                 icon_name: "application-exit".into(),
