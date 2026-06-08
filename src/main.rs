@@ -1,13 +1,12 @@
 use ksni::TrayMethods;
+use mimi_ime::config::GlobalAppState;
 use mimi_ime::config::InputMode;
+use mimi_ime::input_method::start_input_method;
+use mimi_ime::tray::tray::{APP_NAME, MimiTray, TrayMessage};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use users::get_current_username;
-
-use mimi_ime::config::GlobalAppState;
-use mimi_ime::input_method::start_input_method;
-use mimi_ime::tray::tray::{APP_NAME, MimiTray, TrayMessage};
 
 fn init_dir(local_share_dir: &str) {
     for path in [
@@ -46,18 +45,30 @@ async fn main() {
 
     let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
 
-    let tray = MimiTray {
-        current_mode: InputMode::Telex,
-        notifier,
-    };
-
-    let _handle = tray.spawn().await.expect("Failed to start system tray");
-
     tokio::spawn(async move {
         while let Some(msg) = tray_msgs.recv().await {
             match msg {
                 TrayMessage::ModeChanged(mode) => {
                     app_state.lock().unwrap().current_mode = mode;
+                }
+            }
+        }
+    });
+
+    tokio::spawn(async move {
+        loop {
+            let tray = MimiTray {
+                current_mode: InputMode::Telex,
+                notifier: notifier.clone(),
+            };
+            match tray.spawn().await {
+                Ok(_handle) => {
+                    eprintln!("Tray started");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Tray unavailable, retrying in 3s: {}", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                 }
             }
         }
