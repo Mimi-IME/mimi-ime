@@ -17,6 +17,7 @@
         cargo
         cargo-edit
         rustc
+        clippy
         pkg-config
         libxkbcommon
       ];

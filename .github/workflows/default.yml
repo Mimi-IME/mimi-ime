@@ -1,11 +1,10 @@
-name: Build flake package
+name: Build packages
 on:
   push:
-    branches:
-      - "*"
+    branches: [main]
   pull_request:
-    branches:
-      - "*"
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-flake-package:
