@@ -6,7 +6,8 @@ use wayland_client::{
 use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_keyboard_grab_v2;
 use xkbcommon::xkb;
 
-use super::wayland::InputMethodState;
+use crate::config::InputMode;
+use crate::input_method::wayland::InputMethodState;
 
 pub fn handle_keyboard_event(
     state: &mut InputMethodState,
@@ -172,6 +173,12 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     }
 
     if !is_pressed || ch.is_empty() {
+        forward_key(state, key, key_state);
+        return;
+    }
+
+    let mode = state.app_state.lock().unwrap().current_mode;
+    if mode == InputMode::English {
         forward_key(state, key, key_state);
         return;
     }

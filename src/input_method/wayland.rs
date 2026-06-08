@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::Mutex;
 use wayland_client::{
     Connection, Dispatch, QueueHandle,
     globals::{GlobalListContents, registry_queue_init},
@@ -14,6 +16,7 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 };
 use xkbcommon::xkb;
 
+use crate::config::GlobalAppState;
 use crate::input_method::keyboard::handle_keyboard_event;
 
 pub struct InputMethodState {
@@ -28,10 +31,11 @@ pub struct InputMethodState {
     pub virtual_keyboard: Option<ZwpVirtualKeyboardV1>,
     pub queue_handle: Option<QueueHandle<InputMethodState>>,
     pub suppress_until_modifiers_sync: bool,
+    pub app_state: Arc<Mutex<GlobalAppState>>,
 }
 
 impl InputMethodState {
-    pub fn new() -> Self {
+    pub fn new(app_state: Arc<Mutex<GlobalAppState>>) -> Self {
         Self {
             seat: None,
             im_manager: None,
@@ -44,12 +48,17 @@ impl InputMethodState {
             virtual_keyboard: None,
             queue_handle: None,
             suppress_until_modifiers_sync: false,
+            app_state,
         }
     }
 
     pub fn get_preedit(&self) -> String {
+        let mode = self.app_state.lock().unwrap().current_mode;
+
         let mut result = String::new();
-        vi::transform_buffer(&vi::TELEX, self.pending_chars.iter().cloned(), &mut result);
+        let transformer = mode.get_transformer();
+        transformer.transform(self.pending_chars.clone(), &mut result);
+
         result
     }
 }
@@ -181,11 +190,13 @@ impl Dispatch<ZwpVirtualKeyboardV1, ()> for InputMethodState {
     }
 }
 
-pub fn start_input_method() -> Result<(), Box<dyn std::error::Error>> {
+pub fn start_input_method(
+    app_state: Arc<Mutex<GlobalAppState>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
     let (globals, mut event_queue) = registry_queue_init::<InputMethodState>(&conn)?;
     let qh = event_queue.handle();
-    let mut state = InputMethodState::new();
+    let mut state = InputMethodState::new(app_state);
 
     state.queue_handle = Some(qh.clone());
 
