@@ -2,6 +2,7 @@ use ksni::TrayMethods;
 use std::path::Path;
 use users::get_current_username;
 
+use mimi_ime::input_method::start_input_method;
 use mimi_ime::tray::tray::{APP_NAME, MimiTray};
 
 fn init_dir(local_share_dir: &str) {
@@ -27,12 +28,18 @@ async fn main() {
 
     init_dir(&local_share_dir);
 
+    // Wayland IME chạy trên thread riêng vì blocking
+    std::thread::spawn(|| {
+        if let Err(e) = start_input_method() {
+            eprintln!("Input method error: {}", e);
+        }
+    });
+
     let _handle = MimiTray { is_running: true }
         .spawn()
         .await
         .expect("Failed to start system tray");
 
-    // Giữ process chạy mãi
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
     }

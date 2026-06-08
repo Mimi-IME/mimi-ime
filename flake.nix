@@ -17,7 +17,11 @@
         cargo
         cargo-edit
         rustc
+        pkg-config
+        libxkbcommon
       ];
+
+      PKG_CONFIG_PATH = lib.makeBinPath [ libxkbcommon ];
     };
 
     packages = {

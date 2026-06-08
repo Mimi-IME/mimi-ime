@@ -10,7 +10,9 @@ rustPlatform.buildRustPackage {
 
   src = ../.;
 
-  buildInputs = [];
+  buildInputs = [
+    pkgs.libxkbcommon
+  ];
   nativeBuildInputs = [];
   cargoLock = {
     lockFile = ../Cargo.lock;

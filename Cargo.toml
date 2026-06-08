@@ -8,3 +8,6 @@ tokio = { version = "1.52.3", features = ["rt", "macros", "time"] }
 ksni = "0.3.4"
 users = "0.11.0"
 vi = "0.8.0"
+wayland-client = "0.31.14"
+wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
+xkbcommon = "0.9.0"
