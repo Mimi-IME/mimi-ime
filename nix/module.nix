@@ -1,7 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, options, ... }:
+
 let
-  cfg = config.programs."mimi-ime";
-  isHM = config ? home.packages;
+  cfg = config.programs.mimi-ime;
+  isHM = options ? home.packages;
 in {
   options.programs."mimi-ime" = {
     enable = lib.mkEnableOption "Mimi IME";
