@@ -1,4 +1,4 @@
-# Mimi IME
+![MimiIME Logo](images/mimi-ime-logo1.svg)
 
 Mimi (Meme hay MeoMeo hay Mimi tuỳ cách bạn gọi) là bộ gõ tiếng Việt được viết bằng Rust cho
 Linux và môi trường Wayland!!! >;3

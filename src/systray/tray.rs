@@ -18,7 +18,7 @@ impl ksni::Tray for MimiTray {
         APP_NAME.into()
     }
     fn icon_name(&self) -> String {
-        "input-keyboard".into()
+        "mimi-ime".into()
     }
     fn title(&self) -> String {
         APP_NAME.into()

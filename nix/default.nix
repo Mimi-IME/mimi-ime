@@ -18,6 +18,12 @@ rustPlatform.buildRustPackage {
     lockFile = ../Cargo.lock;
   };
 
+  postInstall = ''
+    # Install icon
+    install -Dm644 images/mimi-ime-icon1.svg \
+    $out/share/icons/hicolor/scalable/apps/mimi-ime.svg
+  '';
+
   meta = with lib; {
     homepage = "";
     description = "mimi-ime rust";
