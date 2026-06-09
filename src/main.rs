@@ -3,7 +3,7 @@ use mimi_ime::config::get_app_config;
 use mimi_ime::config::init_dir;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use mimi_ime::config::settings::init_logging;
 use mimi_ime::input_method::start_input_method;
@@ -27,7 +27,7 @@ async fn main() {
     let app_state_for_wayland = app_state.clone();
     std::thread::spawn(|| {
         if let Err(e) = start_input_method(app_state_for_wayland) {
-            eprintln!("Input method error: {}", e);
+            error!("Input method error: {}", e);
         }
     });
 
