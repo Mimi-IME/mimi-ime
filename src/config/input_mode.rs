@@ -1,4 +1,4 @@
-pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+use vi;
 
 pub trait Transformer {
     fn transform(&self, input: Vec<char>, output: &mut String);
@@ -9,12 +9,6 @@ pub enum InputMode {
     English,
     Vni,
     Telex,
-}
-
-#[derive(Debug)]
-pub struct GlobalAppState {
-    pub current_mode: InputMode,
-    pub is_running: bool,
 }
 
 impl InputMode {
