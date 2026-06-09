@@ -21,12 +21,13 @@ async fn main() {
     info!("mimi-ime starting");
 
     let app_state = Arc::new(Mutex::new(get_app_config()));
+    let app_state_wayland = app_state.clone();
+    let app_state_tray = app_state.clone();
     let current_mode = app_state.lock().unwrap().current_mode;
     info!("Loaded config, current mode: {:?}", current_mode);
 
-    let app_state_for_wayland = app_state.clone();
     std::thread::spawn(|| {
-        if let Err(e) = start_input_method(app_state_for_wayland) {
+        if let Err(e) = start_input_method(app_state_wayland) {
             error!("Input method error: {}", e);
         }
     });
@@ -38,7 +39,7 @@ async fn main() {
             match msg {
                 TrayMessage::ModeChanged(mode) => {
                     info!("Mode changed to: {:?}", mode);
-                    app_state.lock().unwrap().current_mode = mode;
+                    app_state_tray.lock().unwrap().current_mode = mode;
                 }
             }
         }
@@ -66,4 +67,7 @@ async fn main() {
     info!("mimi-ime ready");
     tokio::signal::ctrl_c().await.ok();
     info!("mimi-ime shutting down");
+
+    app_state.lock().unwrap().is_running = false;
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 }
