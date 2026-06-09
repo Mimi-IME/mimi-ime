@@ -1,6 +1,8 @@
+use polling::{Event, Events, Poller};
+use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 use wayland_client::{
     Connection, Dispatch, QueueHandle,
     globals::{GlobalListContents, registry_queue_init},
@@ -249,7 +251,52 @@ pub fn start_input_method(
         return Ok(());
     }
 
-    loop {
-        event_queue.blocking_dispatch(&mut state)?;
+    // Setup poller watch Wayland fd
+    let poller = Poller::new()?;
+    let wayland_fd = conn.as_fd();
+    unsafe {
+        poller.add(&wayland_fd, Event::readable(0))?;
     }
+    let mut events = Events::new();
+    info!("Wayland event loop starting");
+
+    loop {
+        event_queue.dispatch_pending(&mut state)?;
+        event_queue.flush()?;
+
+        if !state.app_state.lock().unwrap().is_running {
+            info!("Shutdown signal received, exiting event loop");
+            break;
+        }
+
+        events.clear();
+        poller.wait(&mut events, Some(std::time::Duration::from_millis(100)))?;
+
+        if !events.is_empty() {
+            debug!("Wayland fd readable, reading events");
+            poller.modify(wayland_fd, Event::readable(0))?;
+            if let Some(guard) = event_queue.prepare_read() {
+                guard.read()?;
+            }
+        }
+    }
+
+    // Cleanup
+    info!("Cleaning up Wayland objects");
+    if let Some(kb) = state.keyboard_grab.take() {
+        debug!("Releasing keyboard grab");
+        kb.release();
+    }
+    if let Some(im) = state.input_method.take() {
+        debug!("Destroying input method");
+        im.destroy();
+    }
+    if let Some(vk) = state.virtual_keyboard.take() {
+        debug!("Destroying virtual keyboard");
+        vk.destroy();
+    }
+    event_queue.flush()?;
+    info!("Wayland cleanup complete");
+
+    Ok(())
 }
