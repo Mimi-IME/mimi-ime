@@ -1,3 +1,5 @@
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+
 pub trait Transformer {
     fn transform(&self, input: Vec<char>, output: &mut String);
 }

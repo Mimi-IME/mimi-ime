@@ -1,12 +1,14 @@
 use ksni::TrayMethods;
-use mimi_ime::config::GlobalAppState;
-use mimi_ime::config::InputMode;
-use mimi_ime::input_method::start_input_method;
-use mimi_ime::systray::tray::{APP_NAME, MimiTray, TrayMessage};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use users::get_current_username;
+
+use mimi_ime::config::APP_NAME;
+use mimi_ime::config::GlobalAppState;
+use mimi_ime::config::InputMode;
+use mimi_ime::input_method::start_input_method;
+use mimi_ime::systray::tray::{MimiTray, TrayMessage};
 
 fn init_dir(local_share_dir: &str) {
     for path in [

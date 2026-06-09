@@ -1,7 +1,6 @@
-use crate::config::InputMode;
 use tokio::sync::mpsc::UnboundedSender;
 
-pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+use crate::config::{APP_NAME, InputMode};
 
 pub enum TrayMessage {
     ModeChanged(InputMode),
