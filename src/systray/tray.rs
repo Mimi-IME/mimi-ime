@@ -1,6 +1,6 @@
-use tokio::sync::mpsc::UnboundedSender;
-
 use crate::config::{APP_NAME, InputMode, settings::set_app_config};
+use tokio::sync::mpsc::UnboundedSender;
+use tracing::info;
 
 pub enum TrayMessage {
     ModeChanged(InputMode),
@@ -38,6 +38,7 @@ impl ksni::Tray for MimiTray {
                 select: Box::new(|this: &mut Self, idx| {
                     let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
                     let new_mode = modes[idx];
+                    info!("Tray: mode changed to {:?}", new_mode);
                     this.current_mode = new_mode;
                     set_app_config(new_mode);
                     this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
@@ -62,7 +63,10 @@ impl ksni::Tray for MimiTray {
             StandardItem {
                 label: "Quit".into(),
                 icon_name: "application-exit".into(),
-                activate: Box::new(|_| std::process::exit(0)),
+                activate: Box::new(|_| {
+                    info!("Tray: quit requested");
+                    std::process::exit(0);
+                }),
                 ..Default::default()
             }
             .into(),

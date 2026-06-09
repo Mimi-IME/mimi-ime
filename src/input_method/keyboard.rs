@@ -1,4 +1,5 @@
 use std::os::fd::AsFd;
+use tracing::{debug, error, trace, warn};
 use wayland_client::{
     WEnum,
     protocol::wl_keyboard::{KeyState, KeymapFormat},
@@ -15,6 +16,7 @@ pub fn handle_keyboard_event(
 ) {
     match event {
         zwp_input_method_keyboard_grab_v2::Event::Keymap { format, fd, size } => {
+            debug!("Keymap received, size: {}", size);
             handle_keymap(state, format, fd, size);
         }
         zwp_input_method_keyboard_grab_v2::Event::Modifiers {
@@ -25,6 +27,10 @@ pub fn handle_keyboard_event(
             ..
         } => {
             state.suppress_until_modifiers_sync = false;
+            trace!(
+                "Modifiers: depressed={} latched={} locked={} group={}",
+                mods_depressed, mods_latched, mods_locked, group
+            );
             handle_modifiers(state, mods_depressed, mods_latched, mods_locked, group);
         }
         zwp_input_method_keyboard_grab_v2::Event::Key {
@@ -33,6 +39,7 @@ pub fn handle_keyboard_event(
             ..
         } => {
             if state.suppress_until_modifiers_sync {
+                debug!("Suppressing key {} until modifiers sync", key);
                 return;
             }
             handle_key(state, key, key_state);
@@ -48,6 +55,7 @@ fn handle_keymap(
     size: u32,
 ) {
     if format != WEnum::Value(KeymapFormat::XkbV1) {
+        warn!("Unsupported keymap format: {:?}", format);
         return;
     }
 
@@ -65,10 +73,11 @@ fn handle_keymap(
 
     match keymap {
         Ok(Some(keymap)) => {
+            debug!("Keymap loaded successfully");
             state.xkb_state = Some(xkb::State::new(&keymap));
         }
-        Ok(None) => eprintln!("Keymap is None"),
-        Err(e) => eprintln!("Failed to create keymap: {}", e),
+        Ok(None) => error!("Keymap is None"),
+        Err(e) => error!("Failed to create keymap: {}", e),
     }
 
     if let Some(vk) = &state.virtual_keyboard {
@@ -96,7 +105,10 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
 
     let xkb_keystate = match &state.xkb_state {
         Some(s) => s,
-        None => return,
+        None => {
+            warn!("handle_key called but xkb_state is None");
+            return;
+        }
     };
 
     let ctrl_active =
@@ -105,36 +117,37 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
 
     if ctrl_active || alt_active {
         if is_pressed && !state.pending_chars.is_empty() {
+            debug!(
+                "Ctrl/Alt pressed with pending chars, committing and forwarding key: {}",
+                key
+            );
             if let Some(im) = &state.input_method {
                 im.set_preedit_string(String::new(), 0, 0);
                 im.commit(state.serial);
                 state.pending_chars.clear();
             }
-
             if let Some(kb) = state.keyboard_grab.take() {
                 kb.release();
             }
             if let (Some(im), Some(qh)) = (&state.input_method, &state.queue_handle) {
                 state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
             }
-
             state.suppress_until_modifiers_sync = true;
             forward_key(state, key, key_state);
-
-            return;
         } else {
+            trace!("Ctrl/Alt active, forwarding key: {}", key);
             forward_key(state, key, key_state);
-            return;
         }
+        return;
     }
 
     let keycode = xkb::Keycode::new(key + 8);
     let keysym = xkb_keystate.key_get_one_sym(keycode);
     let ch = xkb_keystate.key_get_utf8(keycode);
 
-    // Backspace
     if keysym.raw() == xkb::keysyms::KEY_BackSpace {
         if is_pressed && !state.pending_chars.is_empty() {
+            trace!("Backspace with pending: {:?}", state.pending_chars);
             handle_backspace(state);
         } else {
             forward_key(state, key, key_state);
@@ -142,7 +155,6 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         return;
     }
 
-    // Arrow keys, Home, End, Delete, Return, Tab, Escape -> forward to app
     let forward_keys = [
         xkb::keysyms::KEY_Left,
         xkb::keysyms::KEY_Right,
@@ -162,6 +174,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             && let Some(im) = &state.input_method
         {
             let text = state.get_preedit();
+            debug!("Navigation key, committing preedit: {:?}", text);
             im.set_preedit_string(String::new(), 0, 0);
             im.commit_string(text);
             im.commit(state.serial);
@@ -178,10 +191,15 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
 
     let mode = state.app_state.lock().unwrap().current_mode;
     if mode == InputMode::English {
+        trace!("English mode, forwarding key: {}", key);
         forward_key(state, key, key_state);
         return;
     }
 
+    trace!(
+        "Handling char: {:?}, mode: {:?}, pending: {:?}",
+        ch, mode, state.pending_chars
+    );
     handle_char(state, ch);
 }
 
@@ -205,6 +223,7 @@ fn handle_backspace(state: &mut InputMethodState) {
     if let Some(im) = &state.input_method {
         state.pending_chars.pop();
         let preedit = state.get_preedit();
+        trace!("After backspace preedit: {:?}", preedit);
         im.set_preedit_string(preedit, -1, -1);
         im.commit(state.serial);
     }
@@ -212,6 +231,7 @@ fn handle_backspace(state: &mut InputMethodState) {
 
 fn handle_char(state: &mut InputMethodState, ch: String) {
     let Some(im) = &state.input_method else {
+        warn!("handle_char called but input_method is None");
         return;
     };
     let first_char = ch.chars().next().unwrap();
@@ -220,6 +240,7 @@ fn handle_char(state: &mut InputMethodState, ch: String) {
         ' ' => {
             let mut text = state.get_preedit();
             text.push(' ');
+            debug!("Space: committing {:?}", text);
             im.set_preedit_string(String::new(), 0, 0);
             im.commit_string(text);
             im.commit(state.serial);
@@ -228,6 +249,7 @@ fn handle_char(state: &mut InputMethodState, ch: String) {
         '\n' | '\r' => {
             let text = state.get_preedit();
             if !text.is_empty() {
+                debug!("Newline: committing {:?}", text);
                 im.set_preedit_string(String::new(), 0, 0);
                 im.commit_string(text);
                 im.commit(state.serial);
@@ -237,6 +259,7 @@ fn handle_char(state: &mut InputMethodState, ch: String) {
         _ => {
             state.pending_chars.extend(ch.chars());
             let preedit = state.get_preedit();
+            trace!("Preedit updated: {:?}", preedit);
             im.set_preedit_string(preedit, -1, -1);
             im.commit(state.serial);
         }

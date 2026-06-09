@@ -1,7 +1,10 @@
-use super::{APP_NAME, input_mode::InputMode};
 use serde::Deserialize;
 use std::path::Path;
+use tracing_appender::rolling;
+use tracing_subscriber::{EnvFilter, fmt};
 use users::get_current_username;
+
+use super::{APP_NAME, input_mode::InputMode};
 
 #[derive(Debug)]
 pub struct GlobalAppState {
@@ -51,6 +54,22 @@ mode = "English" # Options: English, Vni, Telex
 "#;
         std::fs::write(&config_path, default_config).expect("Failed to write config file");
     }
+}
+
+pub fn init_logging() {
+    let username = get_current_username().expect("Failed to get current username");
+    let log_dir = format!(
+        "/home/{}/.local/share/{}/logs",
+        username.to_string_lossy(),
+        APP_NAME
+    );
+    let file_appender = rolling::daily(&log_dir, "mimi-ime.log");
+    fmt()
+        .with_writer(file_appender)
+        .with_env_filter(EnvFilter::new("debug"))
+        .with_target(true)
+        .with_line_number(true)
+        .init();
 }
 
 pub fn get_app_config() -> GlobalAppState {
