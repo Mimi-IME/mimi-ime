@@ -1,15 +1,13 @@
 name: Build packages
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [closed]
   workflow_dispatch:
 
 jobs:
   build-flake-package:
     name: Build flake package
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
