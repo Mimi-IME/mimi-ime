@@ -32,4 +32,5 @@ Những tính năng quan trọng sẽ hỗ trợ trong tương lai
 
 ## Câu hỏi thường gặp
 
+Tại sao dự án này tồn tại [Why?](./docs/why-mimi-ime.md)
 Xem thêm ở [FAQ](./docs/faq.md)
