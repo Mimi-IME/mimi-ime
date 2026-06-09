@@ -245,16 +245,6 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             im.commit(state.serial);
             state.pending_chars.clear();
         }
-        '\n' | '\r' => {
-            let text = state.get_preedit();
-            if !text.is_empty() {
-                debug!("Newline: committing {:?}", text);
-                im.set_preedit_string(String::new(), 0, 0);
-                im.commit_string(text);
-                im.commit(state.serial);
-                state.pending_chars.clear();
-            }
-        }
         _ => {
             let mode = state.app_state.lock().unwrap().current_mode;
 
