@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use tracing::{debug, error, warn};
 use wayland_client::{
     Connection, Dispatch, QueueHandle,
     globals::{GlobalListContents, registry_queue_init},
@@ -128,12 +129,12 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
     ) {
         match event {
             zwp_input_method_v2::Event::Activate => {
-                eprintln!("[DEBUG] IME Activated");
+                debug!("IME Activated");
                 state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
                 state.pending_chars.clear();
             }
             zwp_input_method_v2::Event::Deactivate => {
-                eprintln!("[DEBUG] IME Deactivated");
+                debug!("IME Deactivated");
                 if let Some(kb) = state.keyboard_grab.take() {
                     kb.release();
                 }
@@ -236,15 +237,15 @@ pub fn start_input_method(
 
     if let (Some(vk_mgr), Some(seat)) = (vk_manager, &state.seat) {
         state.virtual_keyboard = Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()));
-        eprintln!("[DEBUG] virtual_keyboard created OK");
+        debug!("virtual_keyboard created OK");
     } else {
-        eprintln!("[WARN] virtual_keyboard NOT created — missing vk_manager or seat");
+        warn!("virtual_keyboard NOT created — missing vk_manager or seat");
     }
 
     if let (Some(mgr), Some(seat)) = (&state.im_manager, &state.seat) {
         state.input_method = Some(mgr.get_input_method(seat, &qh, ()));
     } else {
-        eprintln!("Compositor doesn't support zwp_input_method_v2");
+        error!("Compositor doesn't support zwp_input_method_v2");
         return Ok(());
     }
 
