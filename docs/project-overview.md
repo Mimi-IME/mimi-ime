@@ -96,7 +96,7 @@ Giống như bảo vệ toà nhà ai có việc thì xử lý rồi mới cho v�
 2b. IME không xử lý → virtual_keyboard → WM → App
 ```
 
-Xem code ở thư mục [systray](../src/input_method/wayland.rs)
+Xem code ở thư mục [wayland](../src/input_method/wayland.rs)
 
 ## Tổng kết
 
