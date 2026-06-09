@@ -1,26 +1,11 @@
 use ksni::TrayMethods;
-use std::path::Path;
+use mimi_ime::config::get_app_config;
+use mimi_ime::config::init_dir;
 use std::sync::Arc;
 use std::sync::Mutex;
-use users::get_current_username;
 
-use mimi_ime::config::APP_NAME;
-use mimi_ime::config::GlobalAppState;
-use mimi_ime::config::InputMode;
 use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
-
-fn init_dir(local_share_dir: &str) {
-    for path in [
-        local_share_dir.to_string(),
-        format!("{}/{}", local_share_dir, APP_NAME),
-        format!("{}/{}/logs", local_share_dir, APP_NAME),
-    ] {
-        if !Path::new(&path).exists() {
-            std::fs::create_dir_all(&path).expect("Failed to create directory");
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -28,15 +13,10 @@ async fn main() {
         eprintln!("WARNING: DBUS_SESSION_BUS_ADDRESS not set — systray will not work");
     }
 
-    let username = get_current_username().expect("Failed to get current username");
-    let local_share_dir = format!("/home/{}/.local/share", username.to_string_lossy());
+    init_dir();
 
-    init_dir(&local_share_dir);
-
-    let app_state = Arc::new(Mutex::new(GlobalAppState {
-        current_mode: InputMode::Telex,
-        is_running: true,
-    }));
+    let app_state = Arc::new(Mutex::new(get_app_config()));
+    let current_mode = app_state.lock().unwrap().current_mode;
 
     let app_state_for_wayland = app_state.clone();
     std::thread::spawn(|| {
@@ -60,7 +40,7 @@ async fn main() {
     tokio::spawn(async move {
         loop {
             let tray = MimiTray {
-                current_mode: InputMode::Telex,
+                current_mode,
                 notifier: notifier.clone(),
             };
             match tray.spawn().await {

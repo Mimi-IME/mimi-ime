@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::config::{APP_NAME, InputMode};
+use crate::config::{APP_NAME, InputMode, settings::set_app_config};
 
 pub enum TrayMessage {
     ModeChanged(InputMode),
@@ -39,6 +39,7 @@ impl ksni::Tray for MimiTray {
                     let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
                     let new_mode = modes[idx];
                     this.current_mode = new_mode;
+                    set_app_config(new_mode);
                     this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
                 }),
                 options: vec![
