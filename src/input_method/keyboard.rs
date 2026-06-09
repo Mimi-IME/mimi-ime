@@ -117,12 +117,11 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
 
     if ctrl_active || alt_active {
         if is_pressed && !state.pending_chars.is_empty() {
-            debug!(
-                "Ctrl/Alt pressed with pending chars, committing and forwarding key: {}",
-                key
-            );
             if let Some(im) = &state.input_method {
+                let text = state.get_preedit();
+                debug!("Ctrl/Alt with pending chars, committing: {:?}", text);
                 im.set_preedit_string(String::new(), 0, 0);
+                im.commit_string(text);
                 im.commit(state.serial);
                 state.pending_chars.clear();
             }
@@ -200,7 +199,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         "Handling char: {:?}, mode: {:?}, pending: {:?}",
         ch, mode, state.pending_chars
     );
-    handle_char(state, ch);
+    handle_char(state, ch, key, key_state);
 }
 
 fn forward_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>) {
@@ -229,7 +228,7 @@ fn handle_backspace(state: &mut InputMethodState) {
     }
 }
 
-fn handle_char(state: &mut InputMethodState, ch: String) {
+fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WEnum<KeyState>) {
     let Some(im) = &state.input_method else {
         warn!("handle_char called but input_method is None");
         return;
@@ -257,6 +256,32 @@ fn handle_char(state: &mut InputMethodState, ch: String) {
             }
         }
         _ => {
+            let mode = state.app_state.lock().unwrap().current_mode;
+
+            if !mode.is_valid_continuation(first_char) {
+                if !state.pending_chars.is_empty() {
+                    let text = state.get_preedit();
+                    debug!(
+                        "Non-continuation char {:?}, committing preedit first: {:?}",
+                        first_char, text
+                    );
+                    im.set_preedit_string(String::new(), 0, 0);
+                    im.commit_string(text);
+                    im.commit(state.serial);
+                    state.pending_chars.clear();
+                }
+                // Release → forward → re-grab
+                if let Some(kb) = state.keyboard_grab.take() {
+                    kb.release();
+                }
+                forward_key(state, key, key_state);
+                if let (Some(im), Some(qh)) = (&state.input_method, &state.queue_handle) {
+                    state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
+                }
+                state.suppress_until_modifiers_sync = true;
+                return;
+            }
+
             state.pending_chars.extend(ch.chars());
             let preedit = state.get_preedit();
             trace!("Preedit updated: {:?}", preedit);

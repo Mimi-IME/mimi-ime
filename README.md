@@ -20,8 +20,8 @@ Những tính năng quan trọng sẽ hỗ trợ trong tương lai
 - [x] Hỗ trợ Wayland (chỉ hỗ trợ các compositor hỗ trợ zwp_input_method_v2)
 - [x] Cho phép english mode và VNI mode
 - [x] Có icon và logo
+- [x] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
 - [ ] Tài liệu giải thích chi tiết của dự án
-- [ ] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
 - [ ] Có GUI cài đặt và thiết lập cấu hình
 
 ## Câu hỏi thường gặp
