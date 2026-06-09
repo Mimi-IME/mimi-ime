@@ -19,6 +19,14 @@ impl InputMode {
             InputMode::Telex => Box::new(TelexTransformer),
         }
     }
+
+    pub fn is_valid_continuation(&self, ch: char) -> bool {
+        match self {
+            InputMode::English => false,
+            InputMode::Telex => ch.is_ascii_alphabetic(),
+            InputMode::Vni => ch.is_ascii_alphabetic() || matches!(ch, '1'..='9'),
+        }
+    }
 }
 
 struct EnglishTransformer;
