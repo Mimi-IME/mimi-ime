@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -6,20 +6,34 @@ use users::get_current_username;
 
 use super::{APP_NAME, input_mode::InputMode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ThemeMode {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone)]
 pub struct GlobalAppState {
     pub current_mode: InputMode,
     pub is_running: bool,
+    pub theme: ThemeMode,
 }
 
 #[derive(Deserialize)]
-struct AppConfig {
+pub struct AppConfig {
     input: InputConfig,
+    ui: Option<UiConfig>,
 }
 
 #[derive(Deserialize)]
-struct InputConfig {
+pub struct InputConfig {
     mode: String,
+}
+
+#[derive(Deserialize)]
+pub struct UiConfig {
+    theme: Option<String>,
 }
 
 pub fn init_dir() {
@@ -86,13 +100,19 @@ pub fn get_app_config() -> GlobalAppState {
         "Telex" => InputMode::Telex,
         _ => InputMode::English,
     };
+    let theme = match config.ui.and_then(|u| u.theme).as_deref() {
+        Some("Light") => ThemeMode::Light,
+        Some("Dark") => ThemeMode::Dark,
+        _ => ThemeMode::System,
+    };
     GlobalAppState {
         current_mode: mode,
         is_running: true,
+        theme,
     }
 }
 
-pub fn set_app_config(mode: InputMode) {
+pub fn set_app_config(mode: InputMode, theme: ThemeMode) {
     let username = get_current_username().expect("Failed to get current username");
     let config_path = format!(
         "/home/{}/.config/{}/config.toml",
@@ -104,9 +124,14 @@ pub fn set_app_config(mode: InputMode) {
         InputMode::Vni => "Vni",
         InputMode::Telex => "Telex",
     };
+    let theme_str = match theme {
+        ThemeMode::Light => "Light",
+        ThemeMode::Dark => "Dark",
+        ThemeMode::System => "System",
+    };
     let config = format!(
-        "[input]\nmode = \"{}\" # Options: English, Vni, Telex\n",
-        mode_str
+        "[input]\nmode = \"{}\"\n\n[ui]\ntheme = \"{}\"\n",
+        mode_str, theme_str
     );
     std::fs::write(&config_path, config).expect("Failed to write config file");
 }

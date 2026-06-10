@@ -1,13 +1,15 @@
 use ksni::TrayMethods;
 use mimi_ime::config::get_app_config;
 use mimi_ime::config::init_dir;
-use std::sync::Arc;
-use std::sync::Mutex;
-use tracing::{error, info, warn};
-
-use mimi_ime::config::settings::init_logging;
+use mimi_ime::config::settings::{GlobalAppState, ThemeMode, init_logging};
+use mimi_ime::config::settings_ui::SettingsApp;
 use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tracing::{error, info, warn};
+use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 #[tokio::main]
 async fn main() {
@@ -24,6 +26,7 @@ async fn main() {
     let app_state_wayland = app_state.clone();
     let app_state_tray = app_state.clone();
     let current_mode = app_state.lock().unwrap().current_mode;
+    let current_theme = app_state.lock().unwrap().theme;
     info!("Loaded config, current mode: {:?}", current_mode);
 
     std::thread::spawn(|| {
@@ -32,7 +35,76 @@ async fn main() {
         }
     });
 
+    let settings_open = Arc::new(AtomicBool::new(false));
+    let settings_open_tray = settings_open.clone();
+    let (settings_tx, settings_rx) = std::sync::mpsc::channel::<GlobalAppState>();
+
+    std::thread::spawn(move || {
+        while let Ok(state) = settings_rx.recv() {
+            let theme = state.theme;
+            let options = eframe::NativeOptions {
+                viewport: egui::ViewportBuilder::default()
+                    .with_title("Mimi IME — Settings")
+                    .with_inner_size([320.0, 160.0])
+                    .with_resizable(false),
+                event_loop_builder: Some(Box::new(|builder| {
+                    builder.with_any_thread(true);
+                })),
+                ..Default::default()
+            };
+            eframe::run_native(
+                "mimi-settings",
+                options,
+                Box::new(|cc| {
+                    let mut fonts = egui::FontDefinitions::default();
+                    for path in [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                        "/run/current-system/sw/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    ] {
+                        if let Ok(bytes) = std::fs::read(path) {
+                            fonts.font_data.insert(
+                                "system_font".into(),
+                                egui::FontData::from_owned(bytes).into(),
+                            );
+                            fonts
+                                .families
+                                .get_mut(&egui::FontFamily::Proportional)
+                                .unwrap()
+                                .insert(0, "system_font".into());
+                            break;
+                        }
+                    }
+                    cc.egui_ctx.set_fonts(fonts);
+                    match theme {
+                        ThemeMode::Light => cc.egui_ctx.set_visuals(egui::Visuals::light()),
+                        ThemeMode::Dark => cc.egui_ctx.set_visuals(egui::Visuals::dark()),
+                        ThemeMode::System => {
+                            if std::env::var("GTK_THEME")
+                                .map(|t| t.contains("dark"))
+                                .unwrap_or(false)
+                                || std::env::var("COLORFGBG")
+                                    .map(|v| v.ends_with(";0"))
+                                    .unwrap_or(false)
+                            {
+                                cc.egui_ctx.set_visuals(egui::Visuals::dark());
+                            } else {
+                                cc.egui_ctx.set_visuals(egui::Visuals::light());
+                            }
+                        }
+                    }
+                    Ok(Box::new(SettingsApp::new(state, cc)))
+                }),
+            )
+            .ok();
+            settings_open.store(false, Ordering::SeqCst);
+        }
+    });
+
     let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
+
+    let tray_handle: Arc<Mutex<Option<ksni::Handle<MimiTray>>>> = Arc::new(Mutex::new(None));
+    let tray_handle_msg = tray_handle.clone();
 
     tokio::spawn(async move {
         while let Some(msg) = tray_msgs.recv().await {
@@ -40,6 +112,20 @@ async fn main() {
                 TrayMessage::ModeChanged(mode) => {
                     info!("Mode changed to: {:?}", mode);
                     app_state_tray.lock().unwrap().current_mode = mode;
+                    let handle = tray_handle_msg.lock().unwrap().clone();
+                    if let Some(handle) = handle {
+                        handle.update(|tray| tray.current_mode = mode).await;
+                    }
+                }
+                TrayMessage::OpenSettings => {
+                    info!("Opening settings window");
+                    if settings_open_tray
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        let state_snapshot = get_app_config();
+                        settings_tx.send(state_snapshot).ok();
+                    }
                 }
             }
         }
@@ -49,11 +135,13 @@ async fn main() {
         loop {
             let tray = MimiTray {
                 current_mode,
+                current_theme,
                 notifier: notifier.clone(),
             };
             match tray.spawn().await {
-                Ok(_) => {
+                Ok(handle) => {
                     info!("Tray started");
+                    *tray_handle.lock().unwrap() = Some(handle);
                     break;
                 }
                 Err(e) => {
