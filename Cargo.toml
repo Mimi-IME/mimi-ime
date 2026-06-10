@@ -1,7 +1,14 @@
 [package]
 name = "mimi-ime"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
 
 [dependencies]
 tokio = { version = "1.52.3", features = ["rt", "macros", "signal"] }
