@@ -20,9 +20,17 @@
         clippy
         pkg-config
         libxkbcommon
+        wayland
+        vulkan-loader
+        mesa
       ];
-
-      PKG_CONFIG_PATH = lib.makeBinPath [ libxkbcommon ];
+      PKG_CONFIG_PATH = "${wayland}/lib/pkgconfig:${libxkbcommon}/lib/pkgconfig";
+      LD_LIBRARY_PATH = lib.makeLibraryPath [
+        wayland
+        libxkbcommon
+        vulkan-loader
+        mesa
+      ];
     };
 
     packages = {

@@ -9,11 +9,12 @@ rustPlatform.buildRustPackage {
   version = "1.0-unstable";
 
   src = ../.;
-
+  nativeBuildInputs = [ pkgs.pkg-config ];
   buildInputs = [
+    pkgs.wayland
     pkgs.libxkbcommon
+    pkgs.stdenv.cc.cc.lib
   ];
-  nativeBuildInputs = [];
   cargoLock = {
     lockFile = ../Cargo.lock;
   };
