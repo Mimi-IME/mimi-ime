@@ -44,7 +44,48 @@ pub fn handle_keyboard_event(
             }
             handle_key(state, key, key_state);
         }
+        zwp_input_method_keyboard_grab_v2::Event::RepeatInfo { rate, delay } => {
+            debug!("RepeatInfo: rate={} delay={}", rate, delay);
+            state.repeat_rate = rate;
+            state.repeat_delay = delay;
+        }
         _ => {}
+    }
+}
+
+pub fn tick_repeat(state: &mut InputMethodState) {
+    let Some(held_since) = state.backspace_held_since else {
+        return;
+    };
+    if state.repeat_rate <= 0 {
+        state.backspace_held_since = None;
+        return;
+    }
+
+    let now = std::time::Instant::now();
+    let delay = std::time::Duration::from_millis(state.repeat_delay as u64);
+    let interval = std::time::Duration::from_millis(1000 / state.repeat_rate as u64);
+
+    if now.duration_since(held_since) < delay {
+        return;
+    }
+
+    let last = state.backspace_last_repeat.unwrap_or(held_since + delay);
+
+    if now.duration_since(last) >= interval {
+        if !state.pending_chars.is_empty() {
+            handle_backspace(state);
+        } else {
+            if let Some(vk) = &state.virtual_keyboard {
+                let time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u32;
+                vk.key(time, state.repeat_key, 1);
+                vk.key(time, state.repeat_key, 0);
+            }
+        }
+        state.backspace_last_repeat = Some(now);
     }
 }
 
@@ -150,11 +191,21 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     }
 
     if keysym.raw() == xkb::keysyms::KEY_BackSpace {
-        if is_pressed && !state.pending_chars.is_empty() {
-            trace!("Backspace with pending: {:?}", state.pending_chars);
-            handle_backspace(state);
+        if is_pressed {
+            if !state.pending_chars.is_empty() {
+                handle_backspace(state);
+                state.backspace_held_since = Some(std::time::Instant::now());
+                state.backspace_last_repeat = None;
+                state.repeat_key = key;
+            } else {
+                forward_key(state, key, key_state);
+            }
         } else {
-            forward_key(state, key, key_state);
+            if state.backspace_held_since.is_none() {
+                forward_key(state, key, key_state);
+            }
+            state.backspace_held_since = None;
+            state.backspace_last_repeat = None;
         }
         return;
     }
