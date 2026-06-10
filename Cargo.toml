@@ -17,3 +17,6 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 polling = { version = "3.11.0", features = ["tracing"] }
+egui = "0.34.3"
+eframe = { version = "0.34.3", default-features = false, features = ["wayland", "wgpu", "default_fonts", "serde"] }
+winit = { version = "0.30.13", features = ["wayland"] }
