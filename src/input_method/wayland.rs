@@ -196,6 +196,20 @@ impl Dispatch<ZwpVirtualKeyboardV1, ()> for InputMethodState {
 pub fn start_input_method(
     app_state: Arc<Mutex<GlobalAppState>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    loop {
+        match try_connect(app_state.clone()) {
+            Ok(()) => {
+                warn!("Wayland connection lost, reconnecting...");
+            }
+            Err(e) => {
+                warn!("Failed to connect to compositor: {}, retrying in 3s...", e);
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+        }
+    }
+}
+
+fn try_connect(app_state: Arc<Mutex<GlobalAppState>>) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
     let (globals, mut event_queue) = registry_queue_init::<InputMethodState>(&conn)?;
     let qh = event_queue.handle();
