@@ -35,6 +35,11 @@ pub struct InputMethodState {
     pub virtual_keyboard: Option<ZwpVirtualKeyboardV1>,
     pub queue_handle: Option<QueueHandle<InputMethodState>>,
     pub suppress_until_modifiers_sync: bool,
+    pub repeat_rate: i32,
+    pub repeat_delay: i32,
+    pub repeat_key: u32,
+    pub backspace_held_since: Option<std::time::Instant>,
+    pub backspace_last_repeat: Option<std::time::Instant>,
     pub app_state: Arc<Mutex<GlobalAppState>>,
     pub notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
 }
@@ -56,6 +61,11 @@ impl InputMethodState {
             virtual_keyboard: None,
             queue_handle: None,
             suppress_until_modifiers_sync: false,
+            repeat_rate: 0,
+            repeat_delay: 600,
+            repeat_key: 0,
+            backspace_held_since: None,
+            backspace_last_repeat: None,
             app_state,
             notifier,
         }
@@ -286,18 +296,24 @@ fn try_connect(
 
     loop {
         event_queue.dispatch_pending(&mut state)?;
+
+        crate::input_method::keyboard::tick_repeat(&mut state);
+
         event_queue.flush()?;
 
         if !state.app_state.lock().unwrap().is_running {
-            info!("Shutdown signal received, exiting event loop");
             break;
         }
 
-        events.clear();
-        poller.wait(&mut events, Some(std::time::Duration::from_millis(100)))?;
+        let timeout = if state.backspace_held_since.is_some() {
+            std::time::Duration::from_millis(10)
+        } else {
+            std::time::Duration::from_millis(100)
+        };
 
+        events.clear();
+        poller.wait(&mut events, Some(timeout))?;
         if !events.is_empty() {
-            debug!("Wayland fd readable, reading events");
             poller.modify(wayland_fd, Event::readable(0))?;
             if let Some(guard) = event_queue.prepare_read() {
                 guard.read()?;
