@@ -50,6 +50,16 @@ impl eframe::App for SettingsApp {
                 ui.selectable_value(&mut self.state.theme, ThemeMode::Dark, "Tối");
             });
 
+            ui.add_space(8.0);
+            ui.label("Phím tắt chuyển mode:");
+            ui.add_space(4.0);
+            ui.text_edit_singleline(&mut self.state.hotkey);
+            ui.label(
+                egui::RichText::new("Ví dụ: ctrl+space, alt+shift")
+                    .weak()
+                    .small(),
+            );
+
             ui.add_space(12.0);
             ui.separator();
             ui.add_space(8.0);
@@ -66,7 +76,11 @@ impl eframe::App for SettingsApp {
 
         if save {
             apply_theme(&ctx, self.state.theme);
-            set_app_config(self.state.current_mode, self.state.theme);
+            set_app_config(
+                self.state.current_mode,
+                self.state.theme,
+                &self.state.hotkey,
+            );
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         if cancel {

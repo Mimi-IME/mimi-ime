@@ -27,10 +27,14 @@ async fn main() {
     let app_state_tray = app_state.clone();
     let current_mode = app_state.lock().unwrap().current_mode;
     let current_theme = app_state.lock().unwrap().theme;
+    let current_hotkey = app_state.lock().unwrap().hotkey.clone();
     info!("Loaded config, current mode: {:?}", current_mode);
 
+    let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
+    let notifier_im = notifier.clone();
+
     std::thread::spawn(|| {
-        if let Err(e) = start_input_method(app_state_wayland) {
+        if let Err(e) = start_input_method(app_state_wayland, notifier_im) {
             error!("Input method error: {}", e);
         }
     });
@@ -45,7 +49,7 @@ async fn main() {
             let options = eframe::NativeOptions {
                 viewport: egui::ViewportBuilder::default()
                     .with_title("Mimi IME — Settings")
-                    .with_inner_size([320.0, 160.0])
+                    .with_inner_size([320.0, 220.0])
                     .with_resizable(false),
                 event_loop_builder: Some(Box::new(|builder| {
                     builder.with_any_thread(true);
@@ -101,8 +105,6 @@ async fn main() {
         }
     });
 
-    let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
-
     let tray_handle: Arc<Mutex<Option<ksni::Handle<MimiTray>>>> = Arc::new(Mutex::new(None));
     let tray_handle_msg = tray_handle.clone();
 
@@ -136,6 +138,7 @@ async fn main() {
             let tray = MimiTray {
                 current_mode,
                 current_theme,
+                current_hotkey: current_hotkey.clone(),
                 notifier: notifier.clone(),
             };
             match tray.spawn().await {

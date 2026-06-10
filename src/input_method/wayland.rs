@@ -21,6 +21,7 @@ use xkbcommon::xkb;
 
 use crate::config::GlobalAppState;
 use crate::input_method::keyboard::handle_keyboard_event;
+use crate::systray::tray::TrayMessage;
 
 pub struct InputMethodState {
     pub seat: Option<wl_seat::WlSeat>,
@@ -35,10 +36,14 @@ pub struct InputMethodState {
     pub queue_handle: Option<QueueHandle<InputMethodState>>,
     pub suppress_until_modifiers_sync: bool,
     pub app_state: Arc<Mutex<GlobalAppState>>,
+    pub notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
 }
 
 impl InputMethodState {
-    pub fn new(app_state: Arc<Mutex<GlobalAppState>>) -> Self {
+    pub fn new(
+        app_state: Arc<Mutex<GlobalAppState>>,
+        notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
+    ) -> Self {
         Self {
             seat: None,
             im_manager: None,
@@ -52,6 +57,7 @@ impl InputMethodState {
             queue_handle: None,
             suppress_until_modifiers_sync: false,
             app_state,
+            notifier,
         }
     }
 
@@ -195,9 +201,10 @@ impl Dispatch<ZwpVirtualKeyboardV1, ()> for InputMethodState {
 
 pub fn start_input_method(
     app_state: Arc<Mutex<GlobalAppState>>,
+    notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
-        match try_connect(app_state.clone()) {
+        match try_connect(app_state.clone(), notifier.clone()) {
             Ok(()) => {
                 warn!("Wayland connection lost, reconnecting...");
             }
@@ -209,11 +216,14 @@ pub fn start_input_method(
     }
 }
 
-fn try_connect(app_state: Arc<Mutex<GlobalAppState>>) -> Result<(), Box<dyn std::error::Error>> {
+fn try_connect(
+    app_state: Arc<Mutex<GlobalAppState>>,
+    notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
     let (globals, mut event_queue) = registry_queue_init::<InputMethodState>(&conn)?;
     let qh = event_queue.handle();
-    let mut state = InputMethodState::new(app_state);
+    let mut state = InputMethodState::new(app_state, notifier);
 
     state.queue_handle = Some(qh.clone());
 

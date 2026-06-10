@@ -14,6 +14,7 @@ pub enum TrayMessage {
 pub struct MimiTray {
     pub current_mode: InputMode,
     pub current_theme: ThemeMode,
+    pub current_hotkey: String,
     pub notifier: UnboundedSender<TrayMessage>,
 }
 
@@ -45,7 +46,7 @@ impl ksni::Tray for MimiTray {
                     let new_mode = modes[idx];
                     info!("Tray: mode changed to {:?}", new_mode);
                     this.current_mode = new_mode;
-                    set_app_config(new_mode, this.current_theme);
+                    set_app_config(new_mode, this.current_theme, &this.current_hotkey);
                     this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
                 }),
                 options: vec![
