@@ -18,6 +18,17 @@ pub struct GlobalAppState {
     pub current_mode: InputMode,
     pub is_running: bool,
     pub theme: ThemeMode,
+    pub hotkey: String,
+}
+
+impl GlobalAppState {
+    pub fn toggle_mode(&mut self) {
+        self.current_mode = match self.current_mode {
+            InputMode::English => InputMode::Vni,
+            InputMode::Vni => InputMode::Telex,
+            InputMode::Telex => InputMode::English,
+        };
+    }
 }
 
 #[derive(Deserialize)]
@@ -34,6 +45,7 @@ pub struct InputConfig {
 #[derive(Deserialize)]
 pub struct UiConfig {
     theme: Option<String>,
+    hotkey: Option<String>,
 }
 
 pub fn init_dir() {
@@ -100,19 +112,24 @@ pub fn get_app_config() -> GlobalAppState {
         "Telex" => InputMode::Telex,
         _ => InputMode::English,
     };
-    let theme = match config.ui.and_then(|u| u.theme).as_deref() {
+    let theme = match config.ui.as_ref().and_then(|u| u.theme.as_deref()) {
         Some("Light") => ThemeMode::Light,
         Some("Dark") => ThemeMode::Dark,
         _ => ThemeMode::System,
     };
+    let hotkey = config
+        .ui
+        .and_then(|u| u.hotkey)
+        .unwrap_or_else(|| "ctrl+space".to_string());
     GlobalAppState {
         current_mode: mode,
         is_running: true,
         theme,
+        hotkey,
     }
 }
 
-pub fn set_app_config(mode: InputMode, theme: ThemeMode) {
+pub fn set_app_config(mode: InputMode, theme: ThemeMode, hotkey: &str) {
     let username = get_current_username().expect("Failed to get current username");
     let config_path = format!(
         "/home/{}/.config/{}/config.toml",
@@ -130,8 +147,8 @@ pub fn set_app_config(mode: InputMode, theme: ThemeMode) {
         ThemeMode::System => "System",
     };
     let config = format!(
-        "[input]\nmode = \"{}\"\n\n[ui]\ntheme = \"{}\"\n",
-        mode_str, theme_str
+        "[input]\nmode = \"{}\"\n\n[ui]\ntheme = \"{}\"\nhotkey = \"{}\"\n",
+        mode_str, theme_str, hotkey
     );
     std::fs::write(&config_path, config).expect("Failed to write config file");
 }

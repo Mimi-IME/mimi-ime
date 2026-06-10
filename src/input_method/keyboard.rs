@@ -1,5 +1,5 @@
 use std::os::fd::AsFd;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use wayland_client::{
     WEnum,
     protocol::wl_keyboard::{KeyState, KeymapFormat},
@@ -115,6 +115,15 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         xkb_keystate.mod_name_is_active(xkb::MOD_NAME_CTRL, xkb::STATE_MODS_EFFECTIVE);
     let alt_active = xkb_keystate.mod_name_is_active(xkb::MOD_NAME_ALT, xkb::STATE_MODS_EFFECTIVE);
 
+    let keycode = xkb::Keycode::new(key + 8);
+    let keysym = xkb_keystate.key_get_one_sym(keycode);
+    let ch = xkb_keystate.key_get_utf8(keycode);
+
+    if is_pressed && check_hotkey(state, keysym, ctrl_active, alt_active) {
+        toggle_mode(state);
+        return;
+    }
+
     if ctrl_active || alt_active {
         if is_pressed && !state.pending_chars.is_empty() {
             if let Some(im) = &state.input_method {
@@ -139,10 +148,6 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         }
         return;
     }
-
-    let keycode = xkb::Keycode::new(key + 8);
-    let keysym = xkb_keystate.key_get_one_sym(keycode);
-    let ch = xkb_keystate.key_get_utf8(keycode);
 
     if keysym.raw() == xkb::keysyms::KEY_BackSpace {
         if is_pressed && !state.pending_chars.is_empty() {
@@ -279,4 +284,51 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             im.commit(state.serial);
         }
     }
+}
+
+fn check_hotkey(
+    state: &InputMethodState,
+    keysym: xkb::Keysym,
+    ctrl_active: bool,
+    alt_active: bool,
+) -> bool {
+    let hotkey = state.app_state.lock().unwrap().hotkey.to_lowercase();
+    let parts: Vec<&str> = hotkey.split('+').collect();
+
+    let needs_ctrl = parts.contains(&"ctrl");
+    let needs_alt = parts.contains(&"alt");
+    let key_part = parts.iter().find(|&&p| p != "ctrl" && p != "alt");
+
+    if needs_ctrl != ctrl_active || needs_alt != alt_active {
+        return false;
+    }
+
+    let expected_sym = match key_part {
+        Some(&"space") => xkb::keysyms::KEY_space,
+        Some(&"tab") => xkb::keysyms::KEY_Tab,
+        Some(s) if s.len() == 1 => s.chars().next().unwrap() as u32,
+        _ => return false,
+    };
+
+    keysym.raw() == expected_sym
+}
+
+fn toggle_mode(state: &mut InputMethodState) {
+    if let Some(im) = &state.input_method
+        && !state.pending_chars.is_empty()
+    {
+        let text = state.get_preedit();
+        im.set_preedit_string(String::new(), 0, 0);
+        im.commit_string(text);
+        im.commit(state.serial);
+        state.pending_chars.clear();
+    }
+
+    state.app_state.lock().unwrap().toggle_mode();
+    let new_mode = state.app_state.lock().unwrap().current_mode;
+    info!("Hotkey: mode toggled to {:?}", new_mode);
+    state
+        .notifier
+        .send(crate::systray::tray::TrayMessage::ModeChanged(new_mode))
+        .ok();
 }
