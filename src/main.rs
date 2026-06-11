@@ -10,13 +10,13 @@ use std::sync::Mutex;
 use tracing::{error, info, warn};
 
 #[cfg(feature = "settings-ui")]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "settings-ui")]
-use winit::platform::wayland::EventLoopBuilderExtWayland;
+use mimi_ime::config::settings::{GlobalAppState, ThemeMode};
 #[cfg(feature = "settings-ui")]
 use mimi_ime::config::settings_ui::SettingsApp;
 #[cfg(feature = "settings-ui")]
-use mimi_ime::config::settings::{GlobalAppState, ThemeMode};
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "settings-ui")]
+use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 #[tokio::main]
 async fn main() {
