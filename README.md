@@ -37,7 +37,7 @@ Các tính năng cơ bản đã được hoàn thành.
 - [x] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
 - [x] Tài liệu giải thích chi tiết của dự án
 - [x] Có GUI cài đặt và thiết lập cấu hình
-- [x] Cho phép tối ưu mà không có settings UI (chỉ còn 3Mb!!!) 
+- [x] Cho phép tối ưu mà không có settings UI (chỉ còn 3Mb cho 1 file binary có systray mà không kéo chục phụ thuộc 0~0!!!)
 
 Nếu bạn cảm thấy chưa đủ có thể đề xuất tính năng mới thông qua báo cáo lỗi. Tuy nhiên, dự án
 cũng sẽ có những định kiến riêng hy vọng bạn thông cảm nếu tính năng bạn đề xuất không phù hợp
