@@ -1,3 +1,4 @@
+#![cfg(feature = "settings-ui")]
 use crate::config::settings::{GlobalAppState, ThemeMode, set_app_config};
 use eframe::egui;
 

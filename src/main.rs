@@ -1,15 +1,22 @@
 use ksni::TrayMethods;
 use mimi_ime::config::get_app_config;
 use mimi_ime::config::init_dir;
-use mimi_ime::config::settings::{GlobalAppState, ThemeMode, init_logging};
-use mimi_ime::config::settings_ui::SettingsApp;
+use mimi_ime::config::settings::init_logging;
 use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+
 use tracing::{error, info, warn};
+
+#[cfg(feature = "settings-ui")]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "settings-ui")]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
+#[cfg(feature = "settings-ui")]
+use mimi_ime::config::settings_ui::SettingsApp;
+#[cfg(feature = "settings-ui")]
+use mimi_ime::config::settings::{GlobalAppState, ThemeMode};
 
 #[tokio::main]
 async fn main() {
@@ -39,10 +46,14 @@ async fn main() {
         }
     });
 
+    #[cfg(feature = "settings-ui")]
     let settings_open = Arc::new(AtomicBool::new(false));
+    #[cfg(feature = "settings-ui")]
     let settings_open_tray = settings_open.clone();
+    #[cfg(feature = "settings-ui")]
     let (settings_tx, settings_rx) = std::sync::mpsc::channel::<GlobalAppState>();
 
+    #[cfg(feature = "settings-ui")]
     std::thread::spawn(move || {
         while let Ok(state) = settings_rx.recv() {
             let theme = state.theme;
@@ -119,6 +130,7 @@ async fn main() {
                         handle.update(|tray| tray.current_mode = mode).await;
                     }
                 }
+                #[cfg(feature = "settings-ui")]
                 TrayMessage::OpenSettings => {
                     info!("Opening settings window");
                     if settings_open_tray
