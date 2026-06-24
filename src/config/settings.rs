@@ -19,15 +19,29 @@ pub struct GlobalAppState {
     pub is_running: bool,
     pub theme: ThemeMode,
     pub hotkey: String,
+    pub enable_telex: bool,
+    pub enable_vni: bool,
 }
 
 impl GlobalAppState {
+    pub fn enabled_modes(&self) -> Vec<InputMode> {
+        let mut modes = vec![InputMode::English];
+        if self.enable_vni {
+            modes.push(InputMode::Vni);
+        }
+        if self.enable_telex {
+            modes.push(InputMode::Telex);
+        }
+        modes
+    }
+
     pub fn toggle_mode(&mut self) {
-        self.current_mode = match self.current_mode {
-            InputMode::English => InputMode::Vni,
-            InputMode::Vni => InputMode::Telex,
-            InputMode::Telex => InputMode::English,
-        };
+        let modes = self.enabled_modes();
+        let pos = modes
+            .iter()
+            .position(|m| *m == self.current_mode)
+            .unwrap_or(0);
+        self.current_mode = modes[(pos + 1) % modes.len()];
     }
 }
 
@@ -40,6 +54,8 @@ pub struct AppConfig {
 #[derive(Deserialize)]
 pub struct InputConfig {
     mode: String,
+    enable_vni: Option<bool>,
+    enable_telex: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +93,12 @@ fn init_config() {
     if !Path::new(&config_path).exists() {
         let default_config = r#"[input]
 mode = "English" # Options: English, Vni, Telex
+enable_vni = true
+enable_telex = true
+
+[ui]
+theme = "System"
+hotkey = "ctrl+space"
 "#;
         std::fs::write(&config_path, default_config).expect("Failed to write config file");
     }
@@ -121,15 +143,33 @@ pub fn get_app_config() -> GlobalAppState {
         .ui
         .and_then(|u| u.hotkey)
         .unwrap_or_else(|| "ctrl+space".to_string());
+    let enable_vni = config.input.enable_vni.unwrap_or(true);
+    let enable_telex = config.input.enable_telex.unwrap_or(true);
+
+    let mode =
+        if (mode == InputMode::Vni && !enable_vni) || (mode == InputMode::Telex && !enable_telex) {
+            InputMode::English
+        } else {
+            mode
+        };
+
     GlobalAppState {
         current_mode: mode,
         is_running: true,
         theme,
         hotkey,
+        enable_telex,
+        enable_vni,
     }
 }
 
-pub fn set_app_config(mode: InputMode, theme: ThemeMode, hotkey: &str) {
+pub fn set_app_config(
+    mode: InputMode,
+    theme: ThemeMode,
+    hotkey: &str,
+    enable_telex: bool,
+    enable_vni: bool,
+) {
     let username = get_current_username().expect("Failed to get current username");
     let config_path = format!(
         "/home/{}/.config/{}/config.toml",
@@ -147,8 +187,8 @@ pub fn set_app_config(mode: InputMode, theme: ThemeMode, hotkey: &str) {
         ThemeMode::System => "System",
     };
     let config = format!(
-        "[input]\nmode = \"{}\"\n\n[ui]\ntheme = \"{}\"\nhotkey = \"{}\"\n",
-        mode_str, theme_str, hotkey
+        "[input]\nmode = \"{}\"\nenable_vni = {}\nenable_telex = {}\n\n[ui]\ntheme = \"{}\"\nhotkey = \"{}\"\n",
+        mode_str, enable_vni, enable_telex, theme_str, hotkey
     );
     std::fs::write(&config_path, config).expect("Failed to write config file");
 }
