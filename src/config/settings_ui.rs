@@ -81,6 +81,8 @@ impl eframe::App for SettingsApp {
                 self.state.current_mode,
                 self.state.theme,
                 &self.state.hotkey,
+                self.state.enable_telex,
+                self.state.enable_vni,
             );
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
