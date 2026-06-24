@@ -7,7 +7,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "mimi-ime";
-  version = "1.1-unstable";
+  version = "1.2-unstable";
 
   src = ../.;
   nativeBuildInputs = [
