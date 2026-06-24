@@ -16,6 +16,8 @@ pub struct MimiTray {
     pub current_mode: InputMode,
     pub current_theme: ThemeMode,
     pub current_hotkey: String,
+    pub enable_telex: bool,
+    pub enable_vni: bool,
     pub notifier: UnboundedSender<TrayMessage>,
 }
 
@@ -33,37 +35,55 @@ impl ksni::Tray for MimiTray {
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
 
-        let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
+        let mut modes = vec![InputMode::English];
+        if self.enable_vni {
+            modes.push(InputMode::Vni);
+        }
+        if self.enable_telex {
+            modes.push(InputMode::Telex);
+        }
         let selected = modes
             .iter()
             .position(|m| *m == self.current_mode)
             .unwrap_or(0);
 
+        let options = modes
+            .iter()
+            .map(|m| RadioItem {
+                label: match m {
+                    InputMode::English => "English",
+                    InputMode::Vni => "VNI",
+                    InputMode::Telex => "Telex",
+                }
+                .into(),
+                ..Default::default()
+            })
+            .collect();
+
         vec![
             RadioGroup {
                 selected,
-                select: Box::new(|this: &mut Self, idx| {
-                    let modes = [InputMode::English, InputMode::Vni, InputMode::Telex];
+                select: Box::new(move |this: &mut Self, idx| {
+                    let mut modes = vec![InputMode::English];
+                    if this.enable_vni {
+                        modes.push(InputMode::Vni);
+                    }
+                    if this.enable_telex {
+                        modes.push(InputMode::Telex);
+                    }
                     let new_mode = modes[idx];
                     info!("Tray: mode changed to {:?}", new_mode);
                     this.current_mode = new_mode;
-                    set_app_config(new_mode, this.current_theme, &this.current_hotkey);
+                    set_app_config(
+                        new_mode,
+                        this.current_theme,
+                        &this.current_hotkey,
+                        this.enable_telex,
+                        this.enable_vni,
+                    );
                     this.notifier.send(TrayMessage::ModeChanged(new_mode)).ok();
                 }),
-                options: vec![
-                    RadioItem {
-                        label: "English".into(),
-                        ..Default::default()
-                    },
-                    RadioItem {
-                        label: "VNI".into(),
-                        ..Default::default()
-                    },
-                    RadioItem {
-                        label: "Telex".into(),
-                        ..Default::default()
-                    },
-                ],
+                options,
             }
             .into(),
             MenuItem::Separator,

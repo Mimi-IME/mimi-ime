@@ -35,6 +35,8 @@ async fn main() {
     let current_mode = app_state.lock().unwrap().current_mode;
     let current_theme = app_state.lock().unwrap().theme;
     let current_hotkey = app_state.lock().unwrap().hotkey.clone();
+    let current_enable_telex = app_state.lock().unwrap().enable_telex;
+    let current_enable_vni = app_state.lock().unwrap().enable_vni;
     info!("Loaded config, current mode: {:?}", current_mode);
 
     let (notifier, mut tray_msgs) = tokio::sync::mpsc::unbounded_channel();
@@ -151,6 +153,8 @@ async fn main() {
                 current_mode,
                 current_theme,
                 current_hotkey: current_hotkey.clone(),
+                enable_telex: current_enable_telex,
+                enable_vni: current_enable_vni,
                 notifier: notifier.clone(),
             };
             match tray.spawn().await {
