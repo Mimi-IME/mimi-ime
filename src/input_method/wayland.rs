@@ -4,9 +4,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use wayland_client::{
-    Connection, Dispatch, QueueHandle,
+    Connection, Dispatch, QueueHandle, WEnum,
     globals::{GlobalListContents, registry_queue_init},
     protocol::{wl_registry, wl_seat},
+};
+use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
+    ChangeCause, ContentHint, ContentPurpose,
 };
 use wayland_protocols_misc::zwp_input_method_v2::client::{
     zwp_input_method_keyboard_grab_v2::{self, ZwpInputMethodKeyboardGrabV2},
@@ -42,6 +45,12 @@ pub struct InputMethodState {
     pub backspace_last_repeat: Option<std::time::Instant>,
     pub app_state: Arc<Mutex<GlobalAppState>>,
     pub notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
+    pub surrounding_text: String,
+    pub surrounding_cursor: i32,
+    pub surrounding_anchor: i32,
+    pub content_hint: ContentHint,
+    pub content_purpose: ContentPurpose,
+    pub pending_text_change_cause: Option<ChangeCause>,
 }
 
 impl InputMethodState {
@@ -68,6 +77,12 @@ impl InputMethodState {
             backspace_last_repeat: None,
             app_state,
             notifier,
+            surrounding_text: String::new(),
+            surrounding_cursor: -1,
+            surrounding_anchor: -1,
+            content_hint: ContentHint::None,
+            content_purpose: ContentPurpose::Normal,
+            pending_text_change_cause: None,
         }
     }
 
@@ -164,8 +179,58 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     state.pending_chars.clear();
                 }
             }
+            zwp_input_method_v2::Event::SurroundingText {
+                text,
+                cursor,
+                anchor,
+            } => {
+                debug!(
+                    "SurroundingText: text={:?} cursor={} anchor={}",
+                    text, cursor, anchor
+                );
+                state.surrounding_text = text;
+                state.surrounding_cursor = cursor as i32;
+                state.surrounding_anchor = anchor as i32;
+            }
+            zwp_input_method_v2::Event::TextChangeCause { cause } => {
+                debug!("TextChangeCause: {:?}", cause);
+                match cause {
+                    WEnum::Value(cause) => state.pending_text_change_cause = Some(cause),
+                    WEnum::Unknown(v) => warn!("Unknown TextChangeCause value: {}", v),
+                }
+            }
+            zwp_input_method_v2::Event::ContentType { hint, purpose } => {
+                debug!("ContentType: hint={:?} purpose={:?}", hint, purpose);
+                match hint {
+                    WEnum::Value(hint) => state.content_hint = hint,
+                    WEnum::Unknown(v) => warn!("Unknown ContentHint value: {}", v),
+                }
+                match purpose {
+                    WEnum::Value(purpose) => state.content_purpose = purpose,
+                    WEnum::Unknown(v) => warn!("Unknown ContentPurpose value: {}", v),
+                }
+            }
+            zwp_input_method_v2::Event::Unavailable => {
+                warn!("Input method unavailable (seat taken by another IME?)");
+                if let Some(kb) = state.keyboard_grab.take() {
+                    kb.release();
+                }
+                state.pending_chars.clear();
+            }
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
+
+                if let Some(cause) = state.pending_text_change_cause.take()
+                    && cause == ChangeCause::Other
+                    && !state.pending_chars.is_empty()
+                {
+                    debug!(
+                        "Text changed externally, clearing pending buffer to avoid misplaced insert"
+                    );
+                    state.pending_chars.clear();
+                    im.set_preedit_string(String::new(), 0, 0);
+                    im.commit(state.serial);
+                }
             }
             _ => {}
         }

@@ -4,6 +4,7 @@ use wayland_client::{
     WEnum,
     protocol::wl_keyboard::{KeyState, KeymapFormat},
 };
+use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::ContentPurpose;
 use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_keyboard_grab_v2;
 use xkbcommon::xkb;
 
@@ -245,8 +246,16 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     }
 
     let mode = state.app_state.lock().unwrap().current_mode;
-    if mode == InputMode::English {
-        trace!("English mode, forwarding key: {}", key);
+    let is_sensitive_field = matches!(
+        state.content_purpose,
+        ContentPurpose::Password
+            | ContentPurpose::Digits
+            | ContentPurpose::Pin
+            | ContentPurpose::Number
+    );
+
+    if mode == InputMode::English || is_sensitive_field {
+        trace!("English mode or sensitive field, forwarding key: {}", key);
         forward_key(state, key, key_state);
         return;
     }

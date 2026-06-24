@@ -30,3 +30,4 @@ polling = { version = "3.11.0", features = ["tracing"] }
 egui = { version = "0.34.3", optional = true }
 eframe = { version = "0.34.3", optional = true, default-features = false, features = ["wayland", "wgpu", "default_fonts", "serde"] }
 winit = { version = "0.30.13", optional = true, features = ["wayland"] }
+wayland-protocols = { version = "0.32.13", features = ["client"] }
