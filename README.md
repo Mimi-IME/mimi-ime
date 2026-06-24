@@ -31,7 +31,7 @@ Nếu bạn muốn đóng góp đừng ngần ngại tạo báo cáo lỗi hay g
 Các tính năng cơ bản đã được hoàn thành.
 
 - [x] Systray icon
-- [x] Hỗ trợ Wayland (chỉ hỗ trợ các compositor hỗ trợ zwp_input_method_v2)
+- [x] Hỗ trợ Wayland có preedit và surrounding text (chỉ hỗ trợ các compositor hỗ trợ [zwp_input_method_v2](https://wayland.app/protocols/input-method-unstable-v2)) 
 - [x] Cho phép english mode và VNI mode
 - [x] Có icon và logo
 - [x] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
