@@ -35,9 +35,6 @@
 
     packages.${system} = {
       default = callPackage ./nix/default.nix {};
-      mimi-ime-minimal = callPackage ./nix/default.nix {
-        enableSettingsUi = false;
-      };
     };
 
     nixosModules."mimi-ime"       = import ./nix/module.nix;
