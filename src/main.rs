@@ -9,15 +9,6 @@ use std::sync::Mutex;
 
 use tracing::{error, info, warn};
 
-#[cfg(feature = "settings-ui")]
-use mimi_ime::config::settings::{GlobalAppState, ThemeMode};
-#[cfg(feature = "settings-ui")]
-use mimi_ime::config::settings_ui::SettingsApp;
-#[cfg(feature = "settings-ui")]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "settings-ui")]
-use winit::platform::wayland::EventLoopBuilderExtWayland;
-
 #[tokio::main]
 async fn main() {
     init_dir();
@@ -48,76 +39,6 @@ async fn main() {
         }
     });
 
-    #[cfg(feature = "settings-ui")]
-    let settings_open = Arc::new(AtomicBool::new(false));
-    #[cfg(feature = "settings-ui")]
-    let settings_open_tray = settings_open.clone();
-    #[cfg(feature = "settings-ui")]
-    let (settings_tx, settings_rx) = std::sync::mpsc::channel::<GlobalAppState>();
-
-    #[cfg(feature = "settings-ui")]
-    std::thread::spawn(move || {
-        while let Ok(state) = settings_rx.recv() {
-            let theme = state.theme;
-            let options = eframe::NativeOptions {
-                viewport: egui::ViewportBuilder::default()
-                    .with_title("Mimi IME — Settings")
-                    .with_inner_size([320.0, 220.0])
-                    .with_resizable(false),
-                event_loop_builder: Some(Box::new(|builder| {
-                    builder.with_any_thread(true);
-                })),
-                ..Default::default()
-            };
-            eframe::run_native(
-                "mimi-settings",
-                options,
-                Box::new(|cc| {
-                    let mut fonts = egui::FontDefinitions::default();
-                    for path in [
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                        "/run/current-system/sw/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                    ] {
-                        if let Ok(bytes) = std::fs::read(path) {
-                            fonts.font_data.insert(
-                                "system_font".into(),
-                                egui::FontData::from_owned(bytes).into(),
-                            );
-                            fonts
-                                .families
-                                .get_mut(&egui::FontFamily::Proportional)
-                                .unwrap()
-                                .insert(0, "system_font".into());
-                            break;
-                        }
-                    }
-                    cc.egui_ctx.set_fonts(fonts);
-                    match theme {
-                        ThemeMode::Light => cc.egui_ctx.set_visuals(egui::Visuals::light()),
-                        ThemeMode::Dark => cc.egui_ctx.set_visuals(egui::Visuals::dark()),
-                        ThemeMode::System => {
-                            if std::env::var("GTK_THEME")
-                                .map(|t| t.contains("dark"))
-                                .unwrap_or(false)
-                                || std::env::var("COLORFGBG")
-                                    .map(|v| v.ends_with(";0"))
-                                    .unwrap_or(false)
-                            {
-                                cc.egui_ctx.set_visuals(egui::Visuals::dark());
-                            } else {
-                                cc.egui_ctx.set_visuals(egui::Visuals::light());
-                            }
-                        }
-                    }
-                    Ok(Box::new(SettingsApp::new(state, cc)))
-                }),
-            )
-            .ok();
-            settings_open.store(false, Ordering::SeqCst);
-        }
-    });
-
     let tray_handle: Arc<Mutex<Option<ksni::Handle<MimiTray>>>> = Arc::new(Mutex::new(None));
     let tray_handle_msg = tray_handle.clone();
 
@@ -130,17 +51,6 @@ async fn main() {
                     let handle = tray_handle_msg.lock().unwrap().clone();
                     if let Some(handle) = handle {
                         handle.update(|tray| tray.current_mode = mode).await;
-                    }
-                }
-                #[cfg(feature = "settings-ui")]
-                TrayMessage::OpenSettings => {
-                    info!("Opening settings window");
-                    if settings_open_tray
-                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                        .is_ok()
-                    {
-                        let state_snapshot = get_app_config();
-                        settings_tx.send(state_snapshot).ok();
                     }
                 }
             }

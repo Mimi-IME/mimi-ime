@@ -7,8 +7,6 @@ use tracing::info;
 
 pub enum TrayMessage {
     ModeChanged(InputMode),
-    #[cfg(feature = "settings-ui")]
-    OpenSettings,
 }
 
 #[derive(Debug)]
@@ -86,19 +84,6 @@ impl ksni::Tray for MimiTray {
                 options,
             }
             .into(),
-            MenuItem::Separator,
-            #[cfg(feature = "settings-ui")]
-            StandardItem {
-                label: "Thiết lập".into(),
-                icon_name: "preferences-system".into(),
-                activate: Box::new(|this: &mut Self| {
-                    info!("Tray: settings requested");
-                    this.notifier.send(TrayMessage::OpenSettings).ok();
-                }),
-                ..Default::default()
-            }
-            .into(),
-            #[cfg(feature = "settings-ui")]
             MenuItem::Separator,
             StandardItem {
                 label: "Thoát".into(),

@@ -10,9 +10,6 @@ codegen-units = 1
 panic = 'abort'
 strip = true
 
-[features]
-settings-ui = ["egui", "eframe", "winit"]
-
 [dependencies]
 tokio = { version = "1.52.3", features = ["rt", "macros", "signal"] }
 ksni = "0.3.4"
@@ -27,7 +24,4 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 polling = { version = "3.11.0", features = ["tracing"] }
-egui = { version = "0.34.3", optional = true }
-eframe = { version = "0.34.3", optional = true, default-features = false, features = ["wayland", "wgpu", "default_fonts", "serde"] }
-winit = { version = "0.30.13", optional = true, features = ["wayland"] }
 wayland-protocols = { version = "0.32.13", features = ["client"] }
