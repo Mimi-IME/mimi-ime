@@ -20,16 +20,10 @@
         clippy
         pkg-config
         libxkbcommon
-        wayland
-        vulkan-loader
-        mesa
       ];
-      PKG_CONFIG_PATH = "${wayland}/lib/pkgconfig:${libxkbcommon}/lib/pkgconfig";
+      PKG_CONFIG_PATH = "${libxkbcommon}/lib/pkgconfig";
       LD_LIBRARY_PATH = lib.makeLibraryPath [
-        wayland
         libxkbcommon
-        vulkan-loader
-        mesa
       ];
     };
 
@@ -37,7 +31,7 @@
       default = callPackage ./nix/default.nix {};
     };
 
-    nixosModules."mimi-ime"       = import ./nix/module.nix;
-    homeManagerModules."mimi-ime" = import ./nix/module.nix;
+    nixosModules."mimi-ime"       = import ./nix/module.nix self.packages.${system}.default;
+    homeManagerModules."mimi-ime" = import ./nix/module.nix self.packages.${system}.default;
   };
 }

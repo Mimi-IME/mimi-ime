@@ -1,4 +1,6 @@
+defaultPackage:
 { config, lib, pkgs, options, ... }:
+
 let
   cfg = config.programs."mimi-ime";
   isHM = options ? home.packages;
@@ -8,6 +10,7 @@ in {
     package = lib.mkOption {
       type = lib.types.package;
       description = "The mimi-ime package to use.";
+      default = defaultPackage;
     };
   };
 
