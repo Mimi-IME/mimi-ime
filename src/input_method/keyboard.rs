@@ -11,6 +11,35 @@ use xkbcommon::xkb;
 use crate::config::InputMode;
 use crate::input_method::wayland::InputMethodState;
 
+const IDLE_COMMIT_MS: u128 = 1000;
+
+pub fn tick_idle_commit(state: &mut InputMethodState) {
+    if state.pending_chars.is_empty() {
+        return;
+    }
+    let Some(last) = state.last_key_event_at else {
+        return;
+    };
+    if last.elapsed() < std::time::Duration::from_millis(IDLE_COMMIT_MS as u64) {
+        return;
+    }
+
+    debug!(
+        "Idle commit after {}ms, committing preedit",
+        last.elapsed().as_millis()
+    );
+
+    let text = state.get_preedit();
+    if let Some(im) = &state.input_method {
+        im.set_preedit_string(String::new(), 0, 0);
+        im.commit_string(text);
+    }
+    state.im_commit();
+    state.pending_chars.clear();
+
+    state.last_key_event_at = None;
+}
+
 pub fn handle_keyboard_event(
     state: &mut InputMethodState,
     event: zwp_input_method_keyboard_grab_v2::Event,
@@ -39,9 +68,10 @@ pub fn handle_keyboard_event(
             state: key_state,
             ..
         } => {
+            state.last_key_event_at = Some(std::time::Instant::now());
             if state.suppress_until_modifiers_sync {
                 debug!("Suppressing key {} until modifiers sync", key);
-                return;
+                state.suppress_until_modifiers_sync = false;
             }
             handle_key(state, key, key_state);
         }
@@ -170,22 +200,13 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         if is_pressed && !state.pending_chars.is_empty() {
             if let Some(im) = &state.input_method {
                 let text = state.get_preedit();
-                debug!("Ctrl/Alt with pending chars, committing: {:?}", text);
                 im.set_preedit_string(String::new(), 0, 0);
                 im.commit_string(text);
-                im.commit(state.serial);
+                state.im_commit();
                 state.pending_chars.clear();
             }
-            if let Some(kb) = state.keyboard_grab.take() {
-                kb.release();
-            }
-            if let (Some(im), Some(qh)) = (&state.input_method, &state.queue_handle) {
-                state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
-            }
-            state.suppress_until_modifiers_sync = true;
             forward_key(state, key, key_state);
         } else {
-            trace!("Ctrl/Alt active, forwarding key: {}", key);
             forward_key(state, key, key_state);
         }
         return;
@@ -233,7 +254,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             debug!("Navigation key, committing preedit: {:?}", text);
             im.set_preedit_string(String::new(), 0, 0);
             im.commit_string(text);
-            im.commit(state.serial);
+            state.im_commit();
             state.pending_chars.clear();
         }
         forward_key(state, key, key_state);
@@ -289,7 +310,7 @@ fn handle_backspace(state: &mut InputMethodState) {
         let preedit = state.get_preedit();
         trace!("After backspace preedit: {:?}", preedit);
         im.set_preedit_string(preedit, -1, -1);
-        im.commit(state.serial);
+        state.im_commit();
     }
 }
 
@@ -304,10 +325,12 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
         ' ' => {
             let mut text = state.get_preedit();
             text.push(' ');
-            debug!("Space: committing {:?}", text);
-            im.set_preedit_string(String::new(), 0, 0);
-            im.commit_string(text);
-            im.commit(state.serial);
+
+            if let Some(im) = &state.input_method {
+                im.set_preedit_string(String::new(), 0, 0);
+                im.commit_string(text);
+            }
+            state.im_commit();
             state.pending_chars.clear();
         }
         _ => {
@@ -316,24 +339,12 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             if !mode.is_valid_continuation(first_char) {
                 if !state.pending_chars.is_empty() {
                     let text = state.get_preedit();
-                    debug!(
-                        "Non-continuation char {:?}, committing preedit first: {:?}",
-                        first_char, text
-                    );
                     im.set_preedit_string(String::new(), 0, 0);
                     im.commit_string(text);
-                    im.commit(state.serial);
+                    state.im_commit();
                     state.pending_chars.clear();
                 }
-                // Release → forward → re-grab
-                if let Some(kb) = state.keyboard_grab.take() {
-                    kb.release();
-                }
                 forward_key(state, key, key_state);
-                if let (Some(im), Some(qh)) = (&state.input_method, &state.queue_handle) {
-                    state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
-                }
-                state.suppress_until_modifiers_sync = true;
                 return;
             }
 
@@ -341,7 +352,7 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             let preedit = state.get_preedit();
             trace!("Preedit updated: {:?}", preedit);
             im.set_preedit_string(preedit, -1, -1);
-            im.commit(state.serial);
+            state.im_commit();
         }
     }
 }
@@ -380,7 +391,7 @@ fn toggle_mode(state: &mut InputMethodState) {
         let text = state.get_preedit();
         im.set_preedit_string(String::new(), 0, 0);
         im.commit_string(text);
-        im.commit(state.serial);
+        state.im_commit();
         state.pending_chars.clear();
     }
 

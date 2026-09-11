@@ -51,6 +51,9 @@ pub struct InputMethodState {
     pub content_hint: ContentHint,
     pub content_purpose: ContentPurpose,
     pub pending_text_change_cause: Option<ChangeCause>,
+    pub pending_own_commits: u32,
+    pub last_own_commit_at: Option<std::time::Instant>,
+    pub last_key_event_at: Option<std::time::Instant>,
 }
 
 impl InputMethodState {
@@ -83,6 +86,9 @@ impl InputMethodState {
             content_hint: ContentHint::None,
             content_purpose: ContentPurpose::Normal,
             pending_text_change_cause: None,
+            pending_own_commits: 0,
+            last_own_commit_at: None,
+            last_key_event_at: None,
         }
     }
 
@@ -94,6 +100,15 @@ impl InputMethodState {
         transformer.transform(self.pending_chars.clone(), &mut result);
 
         result
+    }
+
+    pub fn im_commit(&mut self) {
+        let serial = self.serial;
+        if let Some(im) = &self.input_method {
+            im.commit(serial);
+        }
+        self.pending_own_commits = self.pending_own_commits.saturating_add(1);
+        self.last_own_commit_at = Some(std::time::Instant::now());
     }
 }
 
@@ -175,7 +190,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     let text = state.get_preedit();
                     im.set_preedit_string(String::new(), 0, 0);
                     im.commit_string(text);
-                    im.commit(state.serial);
+                    state.im_commit();
                     state.pending_chars.clear();
                 }
             }
@@ -184,10 +199,33 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 cursor,
                 anchor,
             } => {
+                let text_changed = text != state.surrounding_text;
+                let cursor_changed = cursor as i32 != state.surrounding_cursor
+                    || anchor as i32 != state.surrounding_anchor;
+
                 debug!(
-                    "SurroundingText: text={:?} cursor={} anchor={}",
-                    text, cursor, anchor
+                    "SurroundingText: text_changed={} cursor_changed={} pending={:?} own_commits={}",
+                    text_changed, cursor_changed, state.pending_chars, state.pending_own_commits
                 );
+
+                if !state.pending_chars.is_empty() {
+                    let cursor_only_change = cursor_changed && !text_changed;
+
+                    let external_text_change = text_changed && state.pending_own_commits == 0;
+
+                    if cursor_only_change || external_text_change {
+                        debug!(
+                            "Resetting preedit (cursor_only={}, external_text={})",
+                            cursor_only_change, external_text_change
+                        );
+                        state.pending_chars.clear();
+                        if let Some(im) = &state.input_method {
+                            im.set_preedit_string(String::new(), 0, 0);
+                        }
+                        state.im_commit();
+                    }
+                }
+
                 state.surrounding_text = text;
                 state.surrounding_cursor = cursor as i32;
                 state.surrounding_anchor = anchor as i32;
@@ -220,16 +258,40 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
 
-                if let Some(cause) = state.pending_text_change_cause.take()
-                    && cause == ChangeCause::Other
-                    && !state.pending_chars.is_empty()
+                if let Some(t) = state.last_own_commit_at
+                    && t.elapsed() > std::time::Duration::from_millis(500)
                 {
                     debug!(
-                        "Text changed externally, clearing pending buffer to avoid misplaced insert"
+                        "Stale pending_own_commits={}, resetting",
+                        state.pending_own_commits
                     );
+                    state.pending_own_commits = 0;
+                }
+
+                let external_by_cause = matches!(
+                    state.pending_text_change_cause.take(),
+                    Some(ChangeCause::Other)
+                );
+
+                let own_ack = state.pending_own_commits > 0;
+                if own_ack {
+                    state.pending_own_commits -= 1;
+                }
+
+                let external = external_by_cause || !own_ack;
+
+                debug!(
+                    "Done: own_ack={} external={} pending_own={} chars={:?}",
+                    own_ack, external, state.pending_own_commits, state.pending_chars
+                );
+
+                if external && !state.pending_chars.is_empty() {
+                    debug!("External state change — clearing stale preedit");
                     state.pending_chars.clear();
-                    im.set_preedit_string(String::new(), 0, 0);
-                    im.commit(state.serial);
+                    if let Some(im) = &state.input_method {
+                        im.set_preedit_string(String::new(), 0, 0);
+                    }
+                    state.im_commit();
                 }
             }
             _ => {}
@@ -363,6 +425,7 @@ fn try_connect(
         event_queue.dispatch_pending(&mut state)?;
 
         crate::input_method::keyboard::tick_repeat(&mut state);
+        crate::input_method::keyboard::tick_idle_commit(&mut state);
 
         event_queue.flush()?;
 
