@@ -25,3 +25,4 @@ tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 polling = { version = "3.11.0", features = ["tracing"] }
 wayland-protocols = { version = "0.32.13", features = ["client"] }
+rustix = { version = "1.1.4", features = ["fs"] }
