@@ -377,6 +377,7 @@ version = "1.2.0"
 dependencies = [
  "ksni",
  "polling",
+ "rustix",
  "serde",
  "tokio",
  "toml",

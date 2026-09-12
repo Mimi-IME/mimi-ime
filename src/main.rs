@@ -4,14 +4,42 @@ use mimi_ime::config::init_dir;
 use mimi_ime::config::settings::init_logging;
 use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
+use rustix::fs::{FlockOperation, flock};
+use std::fs::OpenOptions;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::signal::unix::{SignalKind, signal};
-
 use tracing::{error, info, warn};
+
+fn acquire_instance_lock() -> std::fs::File {
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .expect("XDG_RUNTIME_DIR not set — không có chỗ cho runtime files");
+    let lock_path = format!("{}/mimi-ime.lock", runtime_dir);
+
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .expect("failed to open lock file");
+
+    match flock(&file, FlockOperation::NonBlockingLockExclusive) {
+        Ok(()) => file,
+        Err(_) => {
+            eprintln!(
+                "mimi-ime is already running (lock held at {}), exiting",
+                lock_path
+            );
+            std::process::exit(0);
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
+    let _lock = acquire_instance_lock();
+
     init_dir();
     init_logging();
 
