@@ -12,6 +12,31 @@ use crate::config::InputMode;
 use crate::input_method::wayland::InputMethodState;
 
 const IDLE_COMMIT_MS: u128 = 1000;
+const FORWARD_TIMEOUT_MS: u64 = 50;
+
+pub fn defer_forward_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>) {
+    state.pending_forward_keys.push((key, key_state));
+    state.pending_forward_deadline =
+        Some(std::time::Instant::now() + std::time::Duration::from_millis(FORWARD_TIMEOUT_MS));
+}
+
+pub fn tick_pending_forward(state: &mut InputMethodState) {
+    let Some(deadline) = state.pending_forward_deadline else {
+        return;
+    };
+    if std::time::Instant::now() < deadline {
+        return;
+    }
+    warn!(
+        "Deferred forward timeout, force-forwarding {} keys",
+        state.pending_forward_keys.len()
+    );
+    let keys: Vec<_> = state.pending_forward_keys.drain(..).collect();
+    for (key, key_state) in keys {
+        forward_key(state, key, key_state);
+    }
+    state.pending_forward_deadline = None;
+}
 
 pub fn tick_idle_commit(state: &mut InputMethodState) {
     if state.pending_chars.is_empty() {
@@ -197,18 +222,17 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     }
 
     if ctrl_active || alt_active {
-        if is_pressed && !state.pending_chars.is_empty() {
-            if let Some(im) = &state.input_method {
-                let text = state.get_preedit();
-                im.set_preedit_string(String::new(), 0, 0);
-                im.commit_string(text);
-                state.im_commit();
-                state.pending_chars.clear();
-            }
-            forward_key(state, key, key_state);
-        } else {
-            forward_key(state, key, key_state);
+        if is_pressed
+            && !state.pending_chars.is_empty()
+            && let Some(im) = &state.input_method
+        {
+            let text = state.get_preedit();
+            im.set_preedit_string(String::new(), 0, 0);
+            im.commit_string(text);
+            state.im_commit();
+            state.pending_chars.clear();
         }
+        forward_key(state, key, key_state);
         return;
     }
 
@@ -245,7 +269,14 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         xkb::keysyms::KEY_Escape,
     ];
 
-    if forward_keys.iter().any(|&k| keysym.raw() == k) {
+    let is_forward_key = forward_keys.iter().any(|&k| keysym.raw() == k);
+
+    if is_forward_key {
+        if !state.pending_forward_keys.is_empty() {
+            defer_forward_key(state, key, key_state);
+            return;
+        }
+
         if is_pressed
             && !state.pending_chars.is_empty()
             && let Some(im) = &state.input_method
@@ -256,7 +287,10 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             im.commit_string(text);
             state.im_commit();
             state.pending_chars.clear();
+            defer_forward_key(state, key, key_state);
+            return;
         }
+
         forward_key(state, key, key_state);
         return;
     }
@@ -288,7 +322,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
     handle_char(state, ch, key, key_state);
 }
 
-fn forward_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>) {
+pub fn forward_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>) {
     if let Some(vk) = &state.virtual_keyboard {
         let time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -338,13 +372,15 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
 
             if !mode.is_valid_continuation(first_char) {
                 if !state.pending_chars.is_empty() {
-                    let text = state.get_preedit();
+                    let mut text = state.get_preedit();
+                    text.push_str(&ch);
                     im.set_preedit_string(String::new(), 0, 0);
                     im.commit_string(text);
                     state.im_commit();
                     state.pending_chars.clear();
+                } else {
+                    forward_key(state, key, key_state);
                 }
-                forward_key(state, key, key_state);
                 return;
             }
 

@@ -3,6 +3,7 @@ use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{debug, error, info, warn};
+use wayland_client::protocol::wl_keyboard::KeyState;
 use wayland_client::{
     Connection, Dispatch, QueueHandle, WEnum,
     globals::{GlobalListContents, registry_queue_init},
@@ -23,6 +24,7 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 use xkbcommon::xkb;
 
 use crate::config::GlobalAppState;
+use crate::input_method::keyboard::forward_key;
 use crate::input_method::keyboard::handle_keyboard_event;
 use crate::systray::tray::TrayMessage;
 
@@ -54,6 +56,10 @@ pub struct InputMethodState {
     pub pending_own_commits: u32,
     pub last_own_commit_at: Option<std::time::Instant>,
     pub last_key_event_at: Option<std::time::Instant>,
+    pub pending_commit: bool,
+    pub surrounding_initialized: bool,
+    pub pending_forward_keys: Vec<(u32, WEnum<KeyState>)>,
+    pub pending_forward_deadline: Option<std::time::Instant>,
 }
 
 impl InputMethodState {
@@ -89,6 +95,10 @@ impl InputMethodState {
             pending_own_commits: 0,
             last_own_commit_at: None,
             last_key_event_at: None,
+            pending_commit: false,
+            surrounding_initialized: false,
+            pending_forward_keys: Vec::new(),
+            pending_forward_deadline: None,
         }
     }
 
@@ -103,6 +113,15 @@ impl InputMethodState {
     }
 
     pub fn im_commit(&mut self) {
+        if self.serial == 0 {
+            debug!("im_commit deferred (serial=0, no Done yet)");
+            self.pending_commit = true;
+            return;
+        }
+        self.commit_now();
+    }
+
+    fn commit_now(&mut self) {
         let serial = self.serial;
         if let Some(im) = &self.input_method {
             im.commit(serial);
@@ -180,6 +199,10 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 debug!("IME Activated");
                 state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
                 state.pending_chars.clear();
+                state.surrounding_initialized = false;
+                state.pending_forward_keys.clear();
+                state.pending_forward_deadline = None;
+                state.pending_own_commits = 0;
             }
             zwp_input_method_v2::Event::Deactivate => {
                 debug!("IME Deactivated");
@@ -191,32 +214,36 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     im.set_preedit_string(String::new(), 0, 0);
                     im.commit_string(text);
                     state.im_commit();
+                    state.pending_commit = false;
                     state.pending_chars.clear();
                 }
+                state.pending_forward_keys.clear();
+                state.pending_forward_deadline = None;
             }
             zwp_input_method_v2::Event::SurroundingText {
                 text,
                 cursor,
                 anchor,
             } => {
-                let text_changed = text != state.surrounding_text;
-                let cursor_changed = cursor as i32 != state.surrounding_cursor
-                    || anchor as i32 != state.surrounding_anchor;
+                let cursor_i = cursor as i32;
+                let anchor_i = anchor as i32;
 
-                debug!(
-                    "SurroundingText: text_changed={} cursor_changed={} pending={:?} own_commits={}",
-                    text_changed, cursor_changed, state.pending_chars, state.pending_own_commits
-                );
+                if state.surrounding_initialized && !state.pending_chars.is_empty() {
+                    let in_flight = state.pending_own_commits > 0;
 
-                if !state.pending_chars.is_empty() {
-                    let cursor_only_change = cursor_changed && !text_changed;
+                    let text_changed = text != state.surrounding_text;
 
-                    let external_text_change = text_changed && state.pending_own_commits == 0;
+                    let cursor_changed = state.surrounding_cursor >= 0
+                        && (cursor_i != state.surrounding_cursor
+                            || anchor_i != state.surrounding_anchor);
 
-                    if cursor_only_change || external_text_change {
+                    let external_text_change = text_changed && !in_flight;
+                    let external_cursor_change = cursor_changed && !in_flight;
+
+                    if external_text_change || external_cursor_change {
                         debug!(
-                            "Resetting preedit (cursor_only={}, external_text={})",
-                            cursor_only_change, external_text_change
+                            "External change, resetting preedit (text={} cursor={})",
+                            external_text_change, external_cursor_change
                         );
                         state.pending_chars.clear();
                         if let Some(im) = &state.input_method {
@@ -227,8 +254,9 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 }
 
                 state.surrounding_text = text;
-                state.surrounding_cursor = cursor as i32;
-                state.surrounding_anchor = anchor as i32;
+                state.surrounding_cursor = cursor_i;
+                state.surrounding_anchor = anchor_i;
+                state.surrounding_initialized = true;
             }
             zwp_input_method_v2::Event::TextChangeCause { cause } => {
                 debug!("TextChangeCause: {:?}", cause);
@@ -258,6 +286,26 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
 
+                let external_by_cause = matches!(
+                    state.pending_text_change_cause.take(),
+                    Some(ChangeCause::Other)
+                );
+
+                let mut skip_own_ack = false;
+                if state.pending_commit {
+                    state.pending_commit = false;
+                    if !state.pending_chars.is_empty() {
+                        debug!(
+                            "Flushing deferred commit after first Done (serial={})",
+                            state.serial
+                        );
+                        state.commit_now();
+                        skip_own_ack = true;
+                    } else {
+                        debug!("Deferred commit dropped — pending_chars empty");
+                    }
+                }
+
                 if let Some(t) = state.last_own_commit_at
                     && t.elapsed() > std::time::Duration::from_millis(500)
                 {
@@ -268,22 +316,21 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     state.pending_own_commits = 0;
                 }
 
-                let external_by_cause = matches!(
-                    state.pending_text_change_cause.take(),
-                    Some(ChangeCause::Other)
-                );
-
-                let own_ack = state.pending_own_commits > 0;
+                let own_ack = !skip_own_ack && state.pending_own_commits > 0;
                 if own_ack {
                     state.pending_own_commits -= 1;
+
+                    if state.pending_own_commits == 0 && !state.pending_forward_keys.is_empty() {
+                        let keys: Vec<_> = state.pending_forward_keys.drain(..).collect();
+                        debug!("All commits acked: forwarding {} deferred keys", keys.len());
+                        for (key, key_state) in keys {
+                            forward_key(state, key, key_state);
+                        }
+                        state.pending_forward_deadline = None;
+                    }
                 }
 
-                let external = external_by_cause || !own_ack;
-
-                debug!(
-                    "Done: own_ack={} external={} pending_own={} chars={:?}",
-                    own_ack, external, state.pending_own_commits, state.pending_chars
-                );
+                let external = !own_ack && external_by_cause && state.pending_own_commits == 0;
 
                 if external && !state.pending_chars.is_empty() {
                     debug!("External state change — clearing stale preedit");
@@ -426,6 +473,7 @@ fn try_connect(
 
         crate::input_method::keyboard::tick_repeat(&mut state);
         crate::input_method::keyboard::tick_idle_commit(&mut state);
+        crate::input_method::keyboard::tick_pending_forward(&mut state);
 
         event_queue.flush()?;
 
@@ -433,11 +481,12 @@ fn try_connect(
             break;
         }
 
-        let timeout = if state.backspace_held_since.is_some() {
-            std::time::Duration::from_millis(10)
-        } else {
-            std::time::Duration::from_millis(100)
-        };
+        let timeout =
+            if state.backspace_held_since.is_some() || state.pending_forward_deadline.is_some() {
+                std::time::Duration::from_millis(10)
+            } else {
+                std::time::Duration::from_millis(100)
+            };
 
         events.clear();
         poller.wait(&mut events, Some(timeout))?;
