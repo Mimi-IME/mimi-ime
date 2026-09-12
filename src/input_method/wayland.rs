@@ -54,6 +54,7 @@ pub struct InputMethodState {
     pub pending_own_commits: u32,
     pub last_own_commit_at: Option<std::time::Instant>,
     pub last_key_event_at: Option<std::time::Instant>,
+    pub pending_commit: bool,
 }
 
 impl InputMethodState {
@@ -89,6 +90,7 @@ impl InputMethodState {
             pending_own_commits: 0,
             last_own_commit_at: None,
             last_key_event_at: None,
+            pending_commit: false,
         }
     }
 
@@ -103,6 +105,15 @@ impl InputMethodState {
     }
 
     pub fn im_commit(&mut self) {
+        if self.serial == 0 {
+            debug!("im_commit deferred (serial=0, no Done yet)");
+            self.pending_commit = true;
+            return;
+        }
+        self.commit_now();
+    }
+
+    fn commit_now(&mut self) {
         let serial = self.serial;
         if let Some(im) = &self.input_method {
             im.commit(serial);
@@ -191,6 +202,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     im.set_preedit_string(String::new(), 0, 0);
                     im.commit_string(text);
                     state.im_commit();
+                    state.pending_commit = false;
                     state.pending_chars.clear();
                 }
             }
@@ -257,6 +269,19 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
             }
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
+
+                if state.pending_commit {
+                    state.pending_commit = false;
+                    if !state.pending_chars.is_empty() {
+                        debug!(
+                            "Flushing deferred commit after first Done (serial={})",
+                            state.serial
+                        );
+                        state.commit_now();
+                    } else {
+                        debug!("Deferred commit dropped — pending_chars empty");
+                    }
+                }
 
                 if let Some(t) = state.last_own_commit_at
                     && t.elapsed() > std::time::Duration::from_millis(500)
