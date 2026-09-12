@@ -86,6 +86,16 @@ impl ksni::Tray for MimiTray {
             .into(),
             MenuItem::Separator,
             StandardItem {
+                label: "Khởi động lại".into(),
+                icon_name: "view-refresh".into(),
+                activate: Box::new(|_| {
+                    info!("Tray: restart requested");
+                    request_restart();
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
                 label: "Thoát".into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|_| {
@@ -96,5 +106,23 @@ impl ksni::Tray for MimiTray {
             }
             .into(),
         ]
+    }
+}
+
+fn request_restart() {
+    let under_systemd =
+        std::env::var_os("INVOCATION_ID").is_some() || std::env::var_os("JOURNAL_STREAM").is_some();
+
+    if under_systemd {
+        info!("Restarting via systemd (exit code 1)");
+        std::process::exit(1);
+    } else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let exe = std::env::current_exe().expect("current_exe");
+            let err = std::process::Command::new(exe).exec();
+            tracing::error!("exec failed: {}", err);
+        }
     }
 }

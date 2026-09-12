@@ -25,6 +25,9 @@ in {
       Service = {
         ExecStart = "${cfg.package}/bin/mimi-ime";
         Restart = "on-failure";
+        RestartSec = 1;
+        StartLimitBurst = 5;
+        StartLimitIntervalSec = 30;
       };
     };
   } else {
@@ -36,6 +39,9 @@ in {
       serviceConfig = {
         ExecStart = "${cfg.package}/bin/mimi-ime";
         Restart = "on-failure";
+        RestartSec = 1;
+        StartLimitBurst = 5;
+        StartLimitIntervalSec = 30;
       };
     };
     warnings = [
