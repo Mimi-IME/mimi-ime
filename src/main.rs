@@ -6,6 +6,7 @@ use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
 use std::sync::Arc;
 use std::sync::Mutex;
+use tokio::signal::unix::{SignalKind, signal};
 
 use tracing::{error, info, warn};
 
@@ -82,7 +83,15 @@ async fn main() {
     });
 
     info!("mimi-ime ready");
-    tokio::signal::ctrl_c().await.ok();
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+
+    tokio::select! {
+        _ = sigterm.recv() => info!("received SIGTERM"),
+        _ = sigint.recv()  => info!("received SIGINT"),
+    }
+
     info!("mimi-ime shutting down");
 
     app_state.lock().unwrap().is_running = false;
