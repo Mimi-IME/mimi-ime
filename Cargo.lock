@@ -373,7 +373,7 @@ dependencies = [
 
 [[package]]
 name = "mimi-ime"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ksni",
  "polling",
