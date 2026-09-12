@@ -12,7 +12,7 @@ let
     exec = "systemctl --user start mimi-ime";
     icon = "mimi-ime";
     terminal = false;
-    categories = [ "Utility" "InputMethod" ];
+    categories = [ "Utility" "System" ];
   };
 in {
   options.programs."mimi-ime" = {
