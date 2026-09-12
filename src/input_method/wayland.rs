@@ -1,9 +1,9 @@
 use polling::{Event, Events, Poller};
-use wayland_client::protocol::wl_keyboard::KeyState;
 use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{debug, error, info, warn};
+use wayland_client::protocol::wl_keyboard::KeyState;
 use wayland_client::{
     Connection, Dispatch, QueueHandle, WEnum,
     globals::{GlobalListContents, registry_queue_init},
@@ -220,7 +220,11 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 state.pending_forward_keys.clear();
                 state.pending_forward_deadline = None;
             }
-            zwp_input_method_v2::Event::SurroundingText { text, cursor, anchor } => {
+            zwp_input_method_v2::Event::SurroundingText {
+                text,
+                cursor,
+                anchor,
+            } => {
                 let cursor_i = cursor as i32;
                 let anchor_i = anchor as i32;
 
@@ -233,12 +237,14 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                         && (cursor_i != state.surrounding_cursor
                             || anchor_i != state.surrounding_anchor);
 
-                    let external_text_change   = text_changed   && !in_flight;
+                    let external_text_change = text_changed && !in_flight;
                     let external_cursor_change = cursor_changed && !in_flight;
 
                     if external_text_change || external_cursor_change {
-                        debug!("External change, resetting preedit (text={} cursor={})",
-                               external_text_change, external_cursor_change);
+                        debug!(
+                            "External change, resetting preedit (text={} cursor={})",
+                            external_text_change, external_cursor_change
+                        );
                         state.pending_chars.clear();
                         if let Some(im) = &state.input_method {
                             im.set_preedit_string(String::new(), 0, 0);
@@ -324,9 +330,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     }
                 }
 
-                let external = !own_ack
-                    && external_by_cause
-                    && state.pending_own_commits == 0;
+                let external = !own_ack && external_by_cause && state.pending_own_commits == 0;
 
                 if external && !state.pending_chars.is_empty() {
                     debug!("External state change — clearing stale preedit");
@@ -477,13 +481,12 @@ fn try_connect(
             break;
         }
 
-        let timeout = if state.backspace_held_since.is_some()
-            || state.pending_forward_deadline.is_some()
-        {
-            std::time::Duration::from_millis(10)
-        } else {
-            std::time::Duration::from_millis(100)
-        };
+        let timeout =
+            if state.backspace_held_since.is_some() || state.pending_forward_deadline.is_some() {
+                std::time::Duration::from_millis(10)
+            } else {
+                std::time::Duration::from_millis(100)
+            };
 
         events.clear();
         poller.wait(&mut events, Some(timeout))?;
