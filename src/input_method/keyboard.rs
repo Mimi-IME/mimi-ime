@@ -9,8 +9,7 @@ use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_keyboa
 use xkbcommon::xkb;
 
 use crate::config::InputMode;
-use crate::input_method::debug::{PendingOp, clear_pending, log_pending};
-use crate::input_method::wayland::InputMethodState;
+use crate::input_method::state::{InputMethodState, PendingOp, log_pending};
 
 const IDLE_COMMIT_MS: u128 = 1000;
 const FORWARD_TIMEOUT_MS: u64 = 50;
@@ -62,7 +61,7 @@ pub fn tick_idle_commit(state: &mut InputMethodState) {
         im.commit_string(text);
     }
     state.im_commit();
-    clear_pending(state, "idle_commit");
+    state.clear_pending("idle_commit");
 
     state.last_key_event_at = None;
 }
@@ -233,7 +232,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             log_pending(state, PendingOp::Commit(&text));
             im.commit_string(text);
             state.im_commit();
-            clear_pending(state, "ctrl_alt");
+            state.clear_pending("ctrl_alt");
         }
         forward_key(state, key, key_state);
         return;
@@ -290,7 +289,7 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             log_pending(state, PendingOp::Commit(&text));
             im.commit_string(text);
             state.im_commit();
-            clear_pending(state, "nav_key");
+            state.clear_pending("nav_key");
             defer_forward_key(state, key, key_state);
             return;
         }
@@ -371,7 +370,7 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             log_pending(state, PendingOp::Commit(&text));
             im.commit_string(text);
             state.im_commit();
-            clear_pending(state, "space");
+            state.clear_pending("space");
         }
         _ => {
             let mode = state.app_state.lock().unwrap().current_mode;
@@ -384,7 +383,7 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
                     log_pending(state, PendingOp::Commit(&text));
                     im.commit_string(text);
                     state.im_commit();
-                    clear_pending(state, "non_continuation");
+                    state.clear_pending("non_continuation");
                 } else {
                     forward_key(state, key, key_state);
                 }
@@ -437,7 +436,7 @@ fn toggle_mode(state: &mut InputMethodState) {
         log_pending(state, PendingOp::Commit(&text));
         im.commit_string(text);
         state.im_commit();
-        clear_pending(state, "toggle_mode");
+        state.clear_pending("toggle_mode");
     }
 
     state.app_state.lock().unwrap().toggle_mode();
