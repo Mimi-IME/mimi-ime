@@ -24,8 +24,8 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 use xkbcommon::xkb;
 
 use crate::config::GlobalAppState;
-use crate::input_method::keyboard::forward_key;
-use crate::input_method::keyboard::handle_keyboard_event;
+use crate::input_method::debug::clear_pending;
+use crate::input_method::keyboard::{forward_key, handle_keyboard_event};
 use crate::systray::tray::TrayMessage;
 
 pub struct InputMethodState {
@@ -198,7 +198,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
             zwp_input_method_v2::Event::Activate => {
                 debug!("IME Activated");
                 state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
-                state.pending_chars.clear();
+                clear_pending(state, "activate");
                 state.surrounding_initialized = false;
                 state.pending_forward_keys.clear();
                 state.pending_forward_deadline = None;
@@ -215,7 +215,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     im.commit_string(text);
                     state.im_commit();
                     state.pending_commit = false;
-                    state.pending_chars.clear();
+                    clear_pending(state, "deactivate");
                 }
                 state.pending_forward_keys.clear();
                 state.pending_forward_deadline = None;
@@ -230,9 +230,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
 
                 if state.surrounding_initialized && !state.pending_chars.is_empty() {
                     let in_flight = state.pending_own_commits > 0;
-
                     let text_changed = text != state.surrounding_text;
-
                     let cursor_changed = state.surrounding_cursor >= 0
                         && (cursor_i != state.surrounding_cursor
                             || anchor_i != state.surrounding_anchor);
@@ -241,11 +239,12 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     let external_cursor_change = cursor_changed && !in_flight;
 
                     if external_text_change || external_cursor_change {
-                        debug!(
-                            "External change, resetting preedit (text={} cursor={})",
-                            external_text_change, external_cursor_change
-                        );
-                        state.pending_chars.clear();
+                        let reason = if external_text_change {
+                            "surrounding_text"
+                        } else {
+                            "surrounding_cursor"
+                        };
+                        clear_pending(state, reason);
                         if let Some(im) = &state.input_method {
                             im.set_preedit_string(String::new(), 0, 0);
                         }
@@ -281,7 +280,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 if let Some(kb) = state.keyboard_grab.take() {
                     kb.release();
                 }
-                state.pending_chars.clear();
+                clear_pending(state, "unavailable");
             }
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
@@ -334,7 +333,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
 
                 if external && !state.pending_chars.is_empty() {
                     debug!("External state change — clearing stale preedit");
-                    state.pending_chars.clear();
+                    clear_pending(state, "done_external");
                     if let Some(im) = &state.input_method {
                         im.set_preedit_string(String::new(), 0, 0);
                     }

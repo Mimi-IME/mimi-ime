@@ -9,6 +9,7 @@ use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_keyboa
 use xkbcommon::xkb;
 
 use crate::config::InputMode;
+use crate::input_method::debug::{PendingOp, clear_pending, log_pending};
 use crate::input_method::wayland::InputMethodState;
 
 const IDLE_COMMIT_MS: u128 = 1000;
@@ -57,10 +58,11 @@ pub fn tick_idle_commit(state: &mut InputMethodState) {
     let text = state.get_preedit();
     if let Some(im) = &state.input_method {
         im.set_preedit_string(String::new(), 0, 0);
+        log_pending(state, PendingOp::Commit(&text));
         im.commit_string(text);
     }
     state.im_commit();
-    state.pending_chars.clear();
+    clear_pending(state, "idle_commit");
 
     state.last_key_event_at = None;
 }
@@ -228,9 +230,10 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
         {
             let text = state.get_preedit();
             im.set_preedit_string(String::new(), 0, 0);
+            log_pending(state, PendingOp::Commit(&text));
             im.commit_string(text);
             state.im_commit();
-            state.pending_chars.clear();
+            clear_pending(state, "ctrl_alt");
         }
         forward_key(state, key, key_state);
         return;
@@ -284,9 +287,10 @@ fn handle_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyState>
             let text = state.get_preedit();
             debug!("Navigation key, committing preedit: {:?}", text);
             im.set_preedit_string(String::new(), 0, 0);
+            log_pending(state, PendingOp::Commit(&text));
             im.commit_string(text);
             state.im_commit();
-            state.pending_chars.clear();
+            clear_pending(state, "nav_key");
             defer_forward_key(state, key, key_state);
             return;
         }
@@ -339,8 +343,11 @@ pub fn forward_key(state: &mut InputMethodState, key: u32, key_state: WEnum<KeyS
 }
 
 fn handle_backspace(state: &mut InputMethodState) {
+    let Some(removed) = state.pending_chars.pop() else {
+        return;
+    };
+    log_pending(state, PendingOp::Pop(removed));
     if let Some(im) = &state.input_method {
-        state.pending_chars.pop();
         let preedit = state.get_preedit();
         trace!("After backspace preedit: {:?}", preedit);
         im.set_preedit_string(preedit, -1, -1);
@@ -360,12 +367,11 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             let mut text = state.get_preedit();
             text.push(' ');
 
-            if let Some(im) = &state.input_method {
-                im.set_preedit_string(String::new(), 0, 0);
-                im.commit_string(text);
-            }
+            im.set_preedit_string(String::new(), 0, 0);
+            log_pending(state, PendingOp::Commit(&text));
+            im.commit_string(text);
             state.im_commit();
-            state.pending_chars.clear();
+            clear_pending(state, "space");
         }
         _ => {
             let mode = state.app_state.lock().unwrap().current_mode;
@@ -375,9 +381,10 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
                     let mut text = state.get_preedit();
                     text.push_str(&ch);
                     im.set_preedit_string(String::new(), 0, 0);
+                    log_pending(state, PendingOp::Commit(&text));
                     im.commit_string(text);
                     state.im_commit();
-                    state.pending_chars.clear();
+                    clear_pending(state, "non_continuation");
                 } else {
                     forward_key(state, key, key_state);
                 }
@@ -385,6 +392,7 @@ fn handle_char(state: &mut InputMethodState, ch: String, key: u32, key_state: WE
             }
 
             state.pending_chars.extend(ch.chars());
+            log_pending(state, PendingOp::Push(&ch));
             let preedit = state.get_preedit();
             trace!("Preedit updated: {:?}", preedit);
             im.set_preedit_string(preedit, -1, -1);
@@ -426,9 +434,10 @@ fn toggle_mode(state: &mut InputMethodState) {
     {
         let text = state.get_preedit();
         im.set_preedit_string(String::new(), 0, 0);
+        log_pending(state, PendingOp::Commit(&text));
         im.commit_string(text);
         state.im_commit();
-        state.pending_chars.clear();
+        clear_pending(state, "toggle_mode");
     }
 
     state.app_state.lock().unwrap().toggle_mode();
