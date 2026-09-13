@@ -3,7 +3,7 @@
 Mimi IME (Meme hay MeoMeo hay Mimi tuỳ cách bạn gọi) là bộ gõ tiếng Việt được viết bằng Rust 🦀 cho
 Linux và môi trường Wayland!!! >;3
 
-Mimi IME sẽ tuân theo chuẩn của Wayland nên sẽ chỉ có duy nhất 1 chế độ pre-edit commit để tránh
+Mimi IME sẽ tuân theo chuẩn của Wayland nên hiện sẽ chỉ có duy nhất 1 chế độ pre-edit commit để tránh
 race condition, làm hỏng tiếng trình gõ text của bạn và sẽ cố gắng nhẹ nhất có thể.
 
 **Lưu ý:** Hiện Mimi IME chỉ hỗ trợ build package từ nix flake cài đặt thành home-manager hay NixOS
@@ -17,8 +17,7 @@ Nếu bạn cần trợ giúp có thể tạo báo cáo lỗi hoặc vào phòng
 
 [Tham gia phòng Matrix](https://matrix.to/#/#mimi-ime:matrix.org)
 
-**Lưu ý:** Nếu có thể hãy đọc [FAQ](./docs/faq.md), [Why Mimi IME?](./docs/why-mimi-ime.md) và
-[Project Overview](./docs/project-overview.md) trước khi gửi báo cáo lỗi
+**Lưu ý:** Nếu có thể hãy đọc [FAQ](./docs/faq.md), [Why Mimi IME?](./docs/why-mimi-ime.md) và [Project Overview](./docs/project-overview.md) trước khi gửi báo cáo lỗi
 
 ## Đóng góp
 
@@ -31,12 +30,36 @@ Nếu bạn muốn đóng góp đừng ngần ngại tạo báo cáo lỗi hay g
 Các tính năng cơ bản đã được hoàn thành.
 
 - [x] Systray icon
-- [x] Hỗ trợ Wayland có preedit và surrounding text (chỉ hỗ trợ các compositor hỗ trợ [zwp_input_method_v2](https://wayland.app/protocols/input-method-unstable-v2)) 
-- [x] Cho phép english mode và VNI mode
+- [x] Hỗ trợ Wayland
+- [x] Cho phép english, Telex và VNI mode
 - [x] Có icon và logo
 - [x] Cải thiện xử lý các sự kiện của bàn phím và phím tắt
 - [x] Tài liệu giải thích chi tiết của dự án
-- [x] Cho phép tối ưu mà không có settings UI (chỉ còn 3Mb cho 1 file binary có systray mà không kéo chục phụ thuộc 0~0!!!)
+- [x] Sử dụng config file
+
+## Hỗ trợ các Desktop Environment và compositor sau
+
+Lưu ý: Hãy tìm hiểu kỹ distro của bạn xài Desktop Environment hay compositor nào mặc định.
+
+|DE/compositor|Sử dụng được Mimi-IME|
+|-|-|
+|COSMIC| ✅Có|
+|GameScope (SteamOS)| ❌Không|
+|KWin (Plasma) | ❌Không|
+|Hyprland|✅Có|
+|Jay|✅Có|
+|Labwc|✅Có|
+|Louvre | ❌ Không|
+|Mir|✅Có|
+|Muffin (Cinnamon) | ❌Không|
+|Mutter (GNOME) | ❌Không|
+|niri|✅Có|
+|phoc|✅Có|
+|river|✅Có|
+|sway|✅Có|
+|Treeland (Deepin)|✅Có|
+|Wayfire | ❌Không|
+|Western | ❌Không|
 
 Nếu bạn cảm thấy chưa đủ có thể đề xuất tính năng mới thông qua báo cáo lỗi. Tuy nhiên, dự án
 cũng sẽ có những định kiến riêng hy vọng bạn thông cảm nếu tính năng bạn đề xuất không phù hợp
