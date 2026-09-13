@@ -1,17 +1,13 @@
 use polling::{Event, Events, Poller};
 use std::os::fd::AsFd;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
-use wayland_client::protocol::wl_keyboard::KeyState;
 use wayland_client::{
     Connection, Dispatch, QueueHandle, WEnum,
     globals::{GlobalListContents, registry_queue_init},
     protocol::{wl_registry, wl_seat},
 };
-use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
-    ChangeCause, ContentHint, ContentPurpose,
-};
+use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::ChangeCause;
 use wayland_protocols_misc::zwp_input_method_v2::client::{
     zwp_input_method_keyboard_grab_v2::{self, ZwpInputMethodKeyboardGrabV2},
     zwp_input_method_manager_v2::{self, ZwpInputMethodManagerV2},
@@ -21,115 +17,11 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
-use xkbcommon::xkb;
 
 use crate::config::GlobalAppState;
-use crate::input_method::debug::{PendingOp, clear_pending, log_pending};
 use crate::input_method::keyboard::{forward_key, handle_keyboard_event};
+use crate::input_method::state::{InputMethodState, PendingOp, log_pending};
 use crate::systray::tray::TrayMessage;
-
-pub struct InputMethodState {
-    pub seat: Option<wl_seat::WlSeat>,
-    pub im_manager: Option<ZwpInputMethodManagerV2>,
-    pub input_method: Option<ZwpInputMethodV2>,
-    pub keyboard_grab: Option<ZwpInputMethodKeyboardGrabV2>,
-    pub serial: u32,
-    pub pending_chars: Vec<char>,
-    pub xkb_context: xkb::Context,
-    pub xkb_state: Option<xkb::State>,
-    pub virtual_keyboard: Option<ZwpVirtualKeyboardV1>,
-    pub queue_handle: Option<QueueHandle<InputMethodState>>,
-    pub suppress_until_modifiers_sync: bool,
-    pub repeat_rate: i32,
-    pub repeat_delay: i32,
-    pub repeat_key: u32,
-    pub backspace_held_since: Option<std::time::Instant>,
-    pub backspace_last_repeat: Option<std::time::Instant>,
-    pub app_state: Arc<Mutex<GlobalAppState>>,
-    pub notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
-    pub surrounding_text: String,
-    pub surrounding_cursor: i32,
-    pub surrounding_anchor: i32,
-    pub content_hint: ContentHint,
-    pub content_purpose: ContentPurpose,
-    pub pending_text_change_cause: Option<ChangeCause>,
-    pub pending_own_commits: u32,
-    pub last_own_commit_at: Option<std::time::Instant>,
-    pub last_key_event_at: Option<std::time::Instant>,
-    pub pending_commit: bool,
-    pub surrounding_initialized: bool,
-    pub pending_forward_keys: Vec<(u32, WEnum<KeyState>)>,
-    pub pending_forward_deadline: Option<std::time::Instant>,
-}
-
-impl InputMethodState {
-    pub fn new(
-        app_state: Arc<Mutex<GlobalAppState>>,
-        notifier: tokio::sync::mpsc::UnboundedSender<TrayMessage>,
-    ) -> Self {
-        Self {
-            seat: None,
-            im_manager: None,
-            input_method: None,
-            keyboard_grab: None,
-            serial: 0,
-            pending_chars: Vec::new(),
-            xkb_context: xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
-            xkb_state: None,
-            virtual_keyboard: None,
-            queue_handle: None,
-            suppress_until_modifiers_sync: false,
-            repeat_rate: 0,
-            repeat_delay: 600,
-            repeat_key: 0,
-            backspace_held_since: None,
-            backspace_last_repeat: None,
-            app_state,
-            notifier,
-            surrounding_text: String::new(),
-            surrounding_cursor: -1,
-            surrounding_anchor: -1,
-            content_hint: ContentHint::None,
-            content_purpose: ContentPurpose::Normal,
-            pending_text_change_cause: None,
-            pending_own_commits: 0,
-            last_own_commit_at: None,
-            last_key_event_at: None,
-            pending_commit: false,
-            surrounding_initialized: false,
-            pending_forward_keys: Vec::new(),
-            pending_forward_deadline: None,
-        }
-    }
-
-    pub fn get_preedit(&self) -> String {
-        let mode = self.app_state.lock().unwrap().current_mode;
-
-        let mut result = String::new();
-        let transformer = mode.get_transformer();
-        transformer.transform(self.pending_chars.clone(), &mut result);
-
-        result
-    }
-
-    pub fn im_commit(&mut self) {
-        if self.serial == 0 {
-            debug!("im_commit deferred (serial=0, no Done yet)");
-            self.pending_commit = true;
-            return;
-        }
-        self.commit_now();
-    }
-
-    fn commit_now(&mut self) {
-        let serial = self.serial;
-        if let Some(im) = &self.input_method {
-            im.commit(serial);
-        }
-        self.pending_own_commits = self.pending_own_commits.saturating_add(1);
-        self.last_own_commit_at = Some(std::time::Instant::now());
-    }
-}
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for InputMethodState {
     fn event(
@@ -214,7 +106,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                     im.commit_string(text);
                     state.im_commit();
                     state.pending_commit = false;
-                    clear_pending(state, "deactivate");
+                    state.clear_pending("deactivate");
                 }
                 state.pending_forward_keys.clear();
                 state.pending_forward_deadline = None;
@@ -243,7 +135,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                         } else {
                             "surrounding_cursor"
                         };
-                        clear_pending(state, reason);
+                        state.clear_pending(reason);
                         if let Some(im) = &state.input_method {
                             im.set_preedit_string(String::new(), 0, 0);
                         }
@@ -279,7 +171,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
                 if let Some(kb) = state.keyboard_grab.take() {
                     kb.release();
                 }
-                clear_pending(state, "unavailable");
+                state.clear_pending("unavailable");
             }
             zwp_input_method_v2::Event::Done => {
                 state.serial += 1;
@@ -332,7 +224,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
 
                 if external && !state.pending_chars.is_empty() {
                     debug!("External state change — clearing stale preedit");
-                    clear_pending(state, "done_external");
+                    state.clear_pending("done_external");
                     if let Some(im) = &state.input_method {
                         im.set_preedit_string(String::new(), 0, 0);
                     }
