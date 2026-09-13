@@ -1,3 +1,4 @@
+mod debug;
 mod keyboard;
 mod wayland;
 
