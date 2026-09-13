@@ -24,7 +24,7 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 use xkbcommon::xkb;
 
 use crate::config::GlobalAppState;
-use crate::input_method::debug::clear_pending;
+use crate::input_method::debug::{PendingOp, clear_pending, log_pending};
 use crate::input_method::keyboard::{forward_key, handle_keyboard_event};
 use crate::systray::tray::TrayMessage;
 
@@ -197,12 +197,11 @@ impl Dispatch<ZwpInputMethodV2, ()> for InputMethodState {
         match event {
             zwp_input_method_v2::Event::Activate => {
                 debug!("IME Activated");
+                log_pending(state, PendingOp::Observe("activate"));
                 state.keyboard_grab = Some(im.grab_keyboard(qh, ()));
-                clear_pending(state, "activate");
                 state.surrounding_initialized = false;
                 state.pending_forward_keys.clear();
                 state.pending_forward_deadline = None;
-                state.pending_own_commits = 0;
             }
             zwp_input_method_v2::Event::Deactivate => {
                 debug!("IME Deactivated");

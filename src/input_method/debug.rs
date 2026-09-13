@@ -7,6 +7,7 @@ pub enum PendingOp<'a> {
     Pop(char),
     Clear(&'a str),
     Commit(&'a str),
+    Observe(&'a str),
 }
 
 pub fn log_pending(state: &InputMethodState, op: PendingOp) {
@@ -36,6 +37,10 @@ pub fn log_pending(state: &InputMethodState, op: PendingOp) {
         PendingOp::Commit(t) => debug!(
             "CHAR commit | text={:?} | pending={:?} | own={} serial={}",
             t, chars, state.pending_own_commits, state.serial
+        ),
+        PendingOp::Observe(tag) => debug!(
+            "CHAR observe ({}) | pending={:?} | own={} serial={} cause={:?}",
+            tag, chars, state.pending_own_commits, state.serial, state.pending_text_change_cause
         ),
     }
 }
