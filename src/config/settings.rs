@@ -1,52 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-use std::time::{Duration, SystemTime};
-use tracing_appender::rolling;
-use tracing_subscriber::{EnvFilter, fmt};
-use users::get_current_username;
+use serde::Deserialize;
 
-use super::{APP_NAME, input_mode::InputMode};
-
-const LOG_RETENTION_DAYS: u64 = 7;
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum ThemeMode {
-    System,
-    Light,
-    Dark,
-}
-
-#[derive(Debug, Clone)]
-pub struct GlobalAppState {
-    pub current_mode: InputMode,
-    pub is_running: bool,
-    pub theme: ThemeMode,
-    pub hotkey: String,
-    pub enable_telex: bool,
-    pub enable_vni: bool,
-}
-
-impl GlobalAppState {
-    pub fn enabled_modes(&self) -> Vec<InputMode> {
-        let mut modes = vec![InputMode::English];
-        if self.enable_vni {
-            modes.push(InputMode::Vni);
-        }
-        if self.enable_telex {
-            modes.push(InputMode::Telex);
-        }
-        modes
-    }
-
-    pub fn toggle_mode(&mut self) {
-        let modes = self.enabled_modes();
-        let pos = modes
-            .iter()
-            .position(|m| *m == self.current_mode)
-            .unwrap_or(0);
-        self.current_mode = modes[(pos + 1) % modes.len()];
-    }
-}
+use super::input_mode::InputMode;
+use super::paths::config_path;
+use super::state::{GlobalAppState, ThemeMode};
 
 #[derive(Deserialize)]
 pub struct AppConfig {
@@ -67,73 +23,8 @@ pub struct UiConfig {
     hotkey: Option<String>,
 }
 
-pub fn init_dir() {
-    let username = get_current_username().expect("Failed to get current username");
-    let config_dir = format!("/home/{}/.config", username.to_string_lossy());
-    let local_share_dir = format!("/home/{}/.local/share", username.to_string_lossy());
-    let paths = [
-        &config_dir,
-        &format!("{}/{}", config_dir, APP_NAME),
-        &local_share_dir,
-        &format!("{}/{}", local_share_dir, APP_NAME),
-        &format!("{}/{}/logs", local_share_dir, APP_NAME),
-    ];
-    for path in paths {
-        if !Path::new(path).exists() {
-            std::fs::create_dir_all(path).expect("Failed to create directory");
-        }
-    }
-    init_config();
-}
-
-fn init_config() {
-    let username = get_current_username().expect("Failed to get current username");
-    let config_path = format!(
-        "/home/{}/.config/{}/config.toml",
-        username.to_string_lossy(),
-        APP_NAME
-    );
-    if !Path::new(&config_path).exists() {
-        let default_config = r#"[input]
-mode = "English" # Options: English, Vni, Telex
-enable_vni = true
-enable_telex = true
-
-[ui]
-theme = "System"
-hotkey = "ctrl+space"
-"#;
-        std::fs::write(&config_path, default_config).expect("Failed to write config file");
-    }
-}
-
-pub fn init_logging() {
-    let username = get_current_username().expect("Failed to get current username");
-    let log_dir = format!(
-        "/home/{}/.local/share/{}/logs",
-        username.to_string_lossy(),
-        APP_NAME
-    );
-
-    cleanup_old_logs(Path::new(&log_dir));
-
-    let file_appender = rolling::daily(&log_dir, "mimi-ime.log");
-    fmt()
-        .with_writer(file_appender)
-        .with_env_filter(EnvFilter::new("debug"))
-        .with_target(true)
-        .with_line_number(true)
-        .init();
-}
-
 pub fn get_app_config() -> GlobalAppState {
-    let username = get_current_username().expect("Failed to get current username");
-    let config_path = format!(
-        "/home/{}/.config/{}/config.toml",
-        username.to_string_lossy(),
-        APP_NAME
-    );
-    let content = std::fs::read_to_string(&config_path).expect("Failed to read config file");
+    let content = std::fs::read_to_string(config_path()).expect("Failed to read config file");
     let config: AppConfig = toml::from_str(&content).expect("Failed to parse config file");
     let mode = match config.input.mode.as_str() {
         "Vni" => InputMode::Vni,
@@ -176,12 +67,6 @@ pub fn set_app_config(
     enable_telex: bool,
     enable_vni: bool,
 ) {
-    let username = get_current_username().expect("Failed to get current username");
-    let config_path = format!(
-        "/home/{}/.config/{}/config.toml",
-        username.to_string_lossy(),
-        APP_NAME
-    );
     let mode_str = match mode {
         InputMode::English => "English",
         InputMode::Vni => "Vni",
@@ -196,51 +81,5 @@ pub fn set_app_config(
         "[input]\nmode = \"{}\"\nenable_vni = {}\nenable_telex = {}\n\n[ui]\ntheme = \"{}\"\nhotkey = \"{}\"\n",
         mode_str, enable_vni, enable_telex, theme_str, hotkey
     );
-    std::fs::write(&config_path, config).expect("Failed to write config file");
-}
-
-fn cleanup_old_logs(log_dir: &Path) {
-    let cutoff = match SystemTime::now()
-        .checked_sub(Duration::from_secs(LOG_RETENTION_DAYS * 24 * 60 * 60))
-    {
-        Some(t) => t,
-        None => return,
-    };
-
-    let entries = match std::fs::read_dir(log_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("log cleanup: cannot read {}: {}", log_dir.display(), e);
-            return;
-        }
-    };
-
-    let mut removed = 0usize;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n,
-            None => continue,
-        };
-        if !name.starts_with("mimi-ime.log") {
-            continue;
-        }
-        let modified = match entry.metadata().and_then(|m| m.modified()) {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        if modified < cutoff && std::fs::remove_file(&path).is_ok() {
-            removed += 1;
-        }
-    }
-
-    if removed > 0 {
-        eprintln!(
-            "log cleanup: removed {} file(s) older than {} days",
-            removed, LOG_RETENTION_DAYS
-        );
-    }
+    std::fs::write(config_path(), config).expect("Failed to write config file");
 }

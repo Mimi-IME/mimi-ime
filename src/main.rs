@@ -1,7 +1,5 @@
 use ksni::TrayMethods;
-use mimi_ime::config::get_app_config;
-use mimi_ime::config::init_dir;
-use mimi_ime::config::settings::init_logging;
+use mimi_ime::config::{get_app_config, init_dir, init_logging};
 use mimi_ime::input_method::start_input_method;
 use mimi_ime::systray::tray::{MimiTray, TrayMessage};
 use rustix::fs::{FlockOperation, flock};
