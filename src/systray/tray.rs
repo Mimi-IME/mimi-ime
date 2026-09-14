@@ -1,7 +1,4 @@
-use crate::config::{
-    APP_NAME, InputMode,
-    settings::{ThemeMode, set_app_config},
-};
+use crate::config::{APP_NAME, InputMode, ThemeMode, set_app_config};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 
